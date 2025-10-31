@@ -771,6 +771,331 @@ blacklist:
 
 ---
 
+## Discord Webhooks
+
+JustTeams can send real-time notifications to Discord channels using webhooks. Get instant updates about team events, member changes, and economy transactions directly in Discord.
+
+### Quick Setup
+
+1. **Create a Discord Webhook:**
+   - Open Discord → Server Settings → Integrations → Webhooks
+   - Click "New Webhook"
+   - Choose a channel (e.g., `#team-logs`)
+   - Copy the webhook URL
+
+2. **Configure JustTeams:**
+   Open `plugins/JustTeams/webhooks.yml`:
+   ```yaml
+   webhook:
+     enabled: true
+     url: "https://discord.com/api/webhooks/YOUR_WEBHOOK_URL"
+     username: "JustTeams Bot"
+     server_name: "My Minecraft Server"
+   ```
+
+3. **Enable Events:**
+   ```yaml
+   events:
+     team_create:
+       enabled: true
+     player_join:
+       enabled: true
+     player_kick:
+       enabled: true
+   ```
+
+4. **Reload Plugin:**
+   ```
+   /team reload
+   ```
+
+### Available Events
+
+| Event | Description | Default | Color |
+|-------|-------------|---------|-------|
+| `team_create` | Team created | ✅ Enabled | 🟢 Green |
+| `team_delete` | Team disbanded | ✅ Enabled | 🔴 Red |
+| `player_join` | Player joined team | ✅ Enabled | 🟢 Green |
+| `player_leave` | Player left team | ✅ Enabled | 🔴 Red |
+| `player_kick` | Player kicked | ✅ Enabled | 🔴 Red |
+| `player_promote` | Player promoted | ✅ Enabled | 🟡 Gold |
+| `player_demote` | Player demoted | ✅ Enabled | 🔵 Blue |
+| `ownership_transfer` | Owner changed | ✅ Enabled | 🟡 Gold |
+| `team_rename` | Team name changed | ✅ Enabled | 🔵 Blue |
+| `team_tag_change` | Team tag changed | ✅ Enabled | 🔵 Blue |
+| `team_pvp_toggle` | PvP toggled | ❌ Disabled | 🔵 Blue |
+| `team_public_toggle` | Public/Private toggled | ❌ Disabled | 🔵 Blue |
+| `player_invite` | Player invited | ❌ Disabled | 🟢 Green |
+| `bank_deposit` | Money deposited | ❌ Disabled | 🟣 Purple |
+| `bank_withdraw` | Money withdrawn | ❌ Disabled | 🟣 Purple |
+
+### Event Configuration Examples
+
+**Team Creation Notification:**
+```yaml
+events:
+  team_create:
+    enabled: true
+    color: 5763719  # Green (decimal)
+    title: "🎉 New Team Created"
+    description: "**{player}** created a new team!"
+    show_fields: true
+    fields:
+      - name: "Team Name"
+        value: "{team}"
+        inline: true
+      - name: "Team Tag"
+        value: "`{tag}`"
+        inline: true
+      - name: "Owner"
+        value: "{player}"
+        inline: true
+    footer: "Team created on {server}"
+    timestamp: true
+```
+
+**Player Kicked Notification:**
+```yaml
+events:
+  player_kick:
+    enabled: true
+    color: 15548997  # Red
+    title: "🚫 Player Kicked"
+    description: "**{kicked}** was kicked from **{team}**"
+    show_fields: true
+    fields:
+      - name: "Kicked Player"
+        value: "{kicked}"
+        inline: true
+      - name: "Kicked By"
+        value: "{kicker}"
+        inline: true
+      - name: "Team"
+        value: "{team} `{tag}`"
+        inline: true
+    footer: "Kicked on {server}"
+    timestamp: true
+```
+
+**Bank Transaction Notification:**
+```yaml
+events:
+  bank_deposit:
+    enabled: true
+    color: 10181046  # Purple
+    title: "💰 Bank Deposit"
+    description: "**{player}** deposited money to **{team}**"
+    show_fields: true
+    fields:
+      - name: "Player"
+        value: "{player}"
+        inline: true
+      - name: "Amount"
+        value: "${amount}"
+        inline: true
+      - name: "New Balance"
+        value: "${balance}"
+        inline: true
+    footer: "Transaction on {server}"
+    timestamp: true
+```
+
+### Available Placeholders
+
+**Common Placeholders (all events):**
+- `{player}` - Player name
+- `{team}` - Team name
+- `{tag}` - Team tag
+- `{server}` - Server name (from config)
+- `{time}` - Current timestamp
+
+**Event-Specific Placeholders:**
+
+| Event | Additional Placeholders |
+|-------|------------------------|
+| `team_delete` | `{member_count}` |
+| `player_join` | `{member_count}` |
+| `player_leave` | `{member_count}` |
+| `player_kick` | `{kicker}`, `{kicked}` |
+| `player_promote` | `{promoter}`, `{old_role}`, `{new_role}` |
+| `player_demote` | `{demoter}`, `{old_role}`, `{new_role}` |
+| `ownership_transfer` | `{old_owner}`, `{new_owner}` |
+| `team_rename` | `{old_name}`, `{new_name}` |
+| `team_tag_change` | `{old_tag}`, `{new_tag}` |
+| `team_pvp_toggle` | `{pvp_status}` (Enabled/Disabled) |
+| `team_public_toggle` | `{public_status}` (Public/Private) |
+| `player_invite` | `{inviter}`, `{invited}` |
+| `bank_deposit` | `{amount}`, `{balance}`, `{new_balance}` |
+| `bank_withdraw` | `{amount}`, `{balance}`, `{new_balance}` |
+
+### Customizing Embed Colors
+
+Discord uses **decimal color codes** for embeds. Convert hex to decimal:
+
+**Common Colors:**
+| Color | Hex | Decimal | Use Case |
+|-------|-----|---------|----------|
+| 🟢 Green | `#58C27D` | 5763719 | Success events (create, join) |
+| 🔴 Red | `#ED4245` | 15548997 | Destructive events (kick, delete) |
+| 🔵 Blue | `#5DADE2` | 5814783 | Info events (rename, toggle) |
+| 🟡 Gold | `#FFC300` | 16766720 | Special events (promote, transfer) |
+| 🟣 Purple | `#9B59B6` | 10181046 | Economy events (bank) |
+| ⚪ Gray | `#95A5A6` | 9807270 | Neutral events |
+
+**Color Converter:** https://www.spycolor.com/ (hex to decimal)
+
+### Rate Limiting & Performance
+
+Prevent Discord API rate limits with built-in rate limiting:
+
+```yaml
+webhook:
+  rate_limiting:
+    enabled: true
+    max_per_minute: 20      # Max webhooks per minute
+    min_delay_ms: 1000      # 1 second between sends
+  
+  retry:
+    enabled: true
+    max_attempts: 3         # Retry failed sends
+    retry_delay_ms: 2000    # 2 seconds between retries
+```
+
+**Recommended Settings:**
+- **Small Server (1-10 players):** `max_per_minute: 20`
+- **Medium Server (10-50 players):** `max_per_minute: 15`, disable spammy events
+- **Large Server (50+ players):** `max_per_minute: 10`, only enable critical events
+
+**Disable Spammy Events for Large Servers:**
+```yaml
+events:
+  player_invite:
+    enabled: false        # Can be very spammy
+  team_pvp_toggle:
+    enabled: false        # Players toggle frequently
+  team_public_toggle:
+    enabled: false        # Not critical
+  bank_deposit:
+    enabled: false        # High traffic
+```
+
+### Multi-Server Setup
+
+For networks with multiple servers, set unique names per server:
+
+**Server 1 (Survival):**
+```yaml
+webhook:
+  server_name: "Survival"
+```
+
+**Server 2 (Creative):**
+```yaml
+webhook:
+  server_name: "Creative"
+```
+
+**Server 3 (SkyBlock):**
+```yaml
+webhook:
+  server_name: "SkyBlock"
+```
+
+All servers can use the **same webhook URL** - the `{server}` placeholder differentiates them in Discord.
+
+### Advanced: Custom Embed Formatting
+
+Full control over Discord embed appearance:
+
+```yaml
+events:
+  team_create:
+    enabled: true
+    
+    # Embed color (decimal)
+    color: 5763719
+    
+    # Main title with emoji
+    title: "🎉 New Team Created"
+    
+    # Description with Discord markdown
+    description: "**{player}** created a new team!"
+    
+    # Enable/disable fields section
+    show_fields: true
+    
+    # Custom fields (up to 25 fields per embed)
+    fields:
+      - name: "Team Name"
+        value: "{team}"
+        inline: true          # Display side-by-side
+      
+      - name: "Team Tag"
+        value: "`{tag}`"      # Inline code formatting
+        inline: true
+      
+      - name: "Owner"
+        value: "{player}"
+        inline: true
+      
+      - name: "Members"
+        value: "{member_count}/10"
+        inline: false         # Full width
+    
+    # Footer text with icon
+    footer: "Team created on {server}"
+    
+    # Show timestamp
+    timestamp: true
+```
+
+**Discord Markdown Support:**
+- `**bold**` → **bold**
+- `*italic*` → *italic*
+- `__underline__` → __underline__
+- `` `code` `` → `code`
+- `~~strikethrough~~` → ~~strikethrough~~
+
+### Troubleshooting Webhooks
+
+**Webhooks not sending:**
+1. Verify webhook URL is correct (copy from Discord)
+2. Check `enabled: true` in webhooks.yml
+3. Enable debug mode in config.yml: `debug: true`
+4. Review console for webhook errors
+5. Test webhook URL with online tester: https://discohook.org/
+
+**Discord says "Invalid Webhook Token":**
+- Webhook URL was deleted/regenerated in Discord
+- Copy new webhook URL from Discord webhook settings
+
+**Messages not appearing:**
+- Check Discord channel permissions for webhook
+- Verify webhook is not muted/disabled
+- Check rate limiting (may be queued)
+
+**Rate limit errors (429):**
+- Reduce `max_per_minute` in config
+- Disable unnecessary events
+- Increase `min_delay_ms` between sends
+
+**Getting Help:**
+Enable debug logging to see detailed webhook activity:
+```yaml
+# config.yml
+settings:
+  debug: true
+```
+
+Console will show:
+```
+[DEBUG] Webhook sent: TEAM_CREATE for team "TheBuilders"
+[DEBUG] Webhook response: 204 No Content (success)
+[DEBUG] Rate limit: 5/20 webhooks sent this minute
+```
+
+---
+
 ## Permissions
 
 ### Core Permissions
