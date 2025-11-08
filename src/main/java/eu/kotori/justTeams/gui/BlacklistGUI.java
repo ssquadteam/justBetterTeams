@@ -63,21 +63,27 @@ IRefreshableGUI {
         this.plugin.getTaskRunner().runAsync(() -> {
             try {
                 List<BlacklistedPlayer> blacklist = this.plugin.getStorageManager().getStorage().getTeamBlacklist(this.team.getId());
+                this.plugin.getCacheManager().cacheTeamBlacklist(this.team.getId(), blacklist);
                 if (blacklist.isEmpty()) {
                     this.plugin.getTaskRunner().runOnEntity((Entity)this.viewer, () -> this.inventory.setItem(22, new ItemBuilder(Material.BOOK).withName("<gray><bold>No Blacklisted Players</bold></gray>").withLore("<gray>No players are currently blacklisted.</gray>", "<gray>Use /team blacklist <player> to add someone.</gray>").withAction("no-blacklisted").build()));
                     return;
                 }
-                int slot = 9;
-                for (BlacklistedPlayer blacklistedPlayer : blacklist) {
-                    if (slot < 45) {
-                        int currentSlot = slot++;
-                        this.plugin.getTaskRunner().runOnEntity((Entity)this.viewer, () -> this.inventory.setItem(currentSlot, this.createBlacklistedPlayerItem(blacklistedPlayer)));
-                        if ((slot - 9) % 9 != 0) continue;
-                        slot += 0;
-                        continue;
+                List<BlacklistedDisplayData> display = blacklist.stream().map(bp -> {
+                    UUID id = bp.getPlayerUuid();
+                    String displayName = this.plugin.getCacheManager().getPlayerName(id);
+                    if (displayName == null || displayName.isEmpty()) {
+                        displayName = bp.getPlayerName() != null ? bp.getPlayerName() : id.toString();
                     }
-                    break;
-                }
+                    String byName = bp.getBlacklistedByName() != null ? bp.getBlacklistedByName() : "Unknown";
+                    return new BlacklistedDisplayData(id, displayName, bp.getReason(), byName, bp.getBlacklistedAt());
+                }).toList();
+                this.plugin.getTaskRunner().runOnEntity((Entity)this.viewer, () -> {
+                    int slot = 9;
+                    for (BlacklistedDisplayData d : display) {
+                        if (slot >= 45) break;
+                        this.inventory.setItem(slot++, this.createBlacklistedPlayerItem(d));
+                    }
+                });
             } catch (Exception e) {
                 this.plugin.getLogger().severe("Error loading team blacklist: " + e.getMessage());
                 this.plugin.getTaskRunner().runOnEntity((Entity)this.viewer, () -> this.inventory.setItem(22, new ItemBuilder(Material.BARRIER).withName("<red><bold>Error Loading Blacklist</bold></red>").withLore("<red>Could not load blacklisted players.</red>").withAction("error").build()));
@@ -85,34 +91,24 @@ IRefreshableGUI {
         });
     }
 
-    private ItemStack createBlacklistedPlayerItem(BlacklistedPlayer blacklistedPlayer) {
-        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer((UUID)blacklistedPlayer.getPlayerUuid());
-        OfflinePlayer blacklistedBy = Bukkit.getOfflinePlayer((UUID)blacklistedPlayer.getBlacklistedByUuid());
-        String timeAgo = this.formatTimeAgo(blacklistedPlayer.getBlacklistedAt());
-        String actionKey = "remove-blacklist:" + blacklistedPlayer.getPlayerUuid().toString();
-        this.plugin.getLogger().info("Creating blacklist item for " + blacklistedPlayer.getPlayerName() + " with action: " + actionKey);
-        ItemStack skull = new ItemStack(Material.PLAYER_HEAD);
-        ItemMeta itemMeta = skull.getItemMeta();
-        if (itemMeta instanceof SkullMeta) {
-            SkullMeta skullMeta = (SkullMeta)itemMeta;
-            skullMeta.setOwningPlayer(offlinePlayer);
-            skull.setItemMeta((ItemMeta)skullMeta);
-        }
-        if ((skull = new ItemBuilder(skull).withName("<gradient:#4C9D9D:#4C96D2><bold>" + blacklistedPlayer.getPlayerName() + "</bold></gradient>").withLore("<gray>Reason: <white>" + blacklistedPlayer.getReason() + "</white>", "<gray>Blacklisted by: <white>" + blacklistedBy.getName() + "</white>", "<gray>Date: <white>" + timeAgo + "</white>", "", "<yellow>Click to remove from blacklist</yellow>").withAction(actionKey).build()).getItemMeta() != null) {
-            String actualAction = (String)skull.getItemMeta().getPersistentDataContainer().get(JustTeams.getActionKey(), PersistentDataType.STRING);
-            this.plugin.getLogger().info("Action key verification for " + blacklistedPlayer.getPlayerName() + " - Expected: " + actionKey + ", Actual: " + actualAction);
-            if (!actionKey.equals(actualAction)) {
-                this.plugin.getLogger().warning("Action key mismatch! Expected: " + actionKey + ", Actual: " + actualAction);
-                ItemMeta meta = skull.getItemMeta();
-                if (meta != null) {
-                    meta.getPersistentDataContainer().set(JustTeams.getActionKey(), PersistentDataType.STRING, actionKey);
-                    skull.setItemMeta(meta);
-                    this.plugin.getLogger().info("Manually set action key for " + blacklistedPlayer.getPlayerName());
-                }
-            }
-        }
+    private ItemStack createBlacklistedPlayerItem(BlacklistedDisplayData data) {
+        String timeAgo = this.formatTimeAgo(data.blacklistedAt());
+        String actionKey = "remove-blacklist:" + data.playerUuid().toString();
+        ItemStack skull = new ItemBuilder(Material.PLAYER_HEAD)
+                .asPlayerHead(data.playerUuid())
+                .withName("<gradient:#4C9D9D:#4C96D2><bold>" + data.displayName() + "</bold></gradient>")
+                .withLore(
+                        "<gray>Reason: <white>" + data.reason() + "</white>",
+                        "<gray>Blacklisted by: <white>" + data.blacklistedByName() + "</white>",
+                        "<gray>Date: <white>" + timeAgo + "</white>",
+                        "",
+                        "<yellow>Click to remove from blacklist</yellow>")
+                .withAction(actionKey)
+                .build();
         return skull;
     }
+
+    private record BlacklistedDisplayData(UUID playerUuid, String displayName, String reason, String blacklistedByName, Instant blacklistedAt) {}
 
     private String formatTimeAgo(Instant blacklistedAt) {
         Duration duration = Duration.between(blacklistedAt, Instant.now());

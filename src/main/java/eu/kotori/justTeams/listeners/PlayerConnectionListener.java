@@ -29,8 +29,10 @@ implements Listener {
         Player player = event.getPlayer();
         this.plugin.getTaskRunner().runAsync(() -> {
             String gamertag;
+            this.plugin.getCacheManager().cachePlayerName(player.getUniqueId(), player.getName());
             this.plugin.getStorageManager().getStorage().cachePlayerName(player.getUniqueId(), player.getName());
             if (this.plugin.getConfigManager().isBedrockSupportEnabled() && this.plugin.getBedrockSupport().isBedrockPlayer(player) && (gamertag = this.plugin.getBedrockSupport().getBedrockGamertag(player)) != null && !gamertag.equals(player.getName())) {
+                this.plugin.getCacheManager().cachePlayerName(player.getUniqueId(), gamertag);
                 this.plugin.getStorageManager().getStorage().cachePlayerName(player.getUniqueId(), gamertag);
                 this.plugin.getLogger().info("Cached Bedrock player: " + player.getName() + " (Gamertag: " + gamertag + ")");
             }

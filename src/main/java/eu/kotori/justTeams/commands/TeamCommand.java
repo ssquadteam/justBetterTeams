@@ -689,9 +689,12 @@ TabCompleter {
         if (player == null || team == null) {
             return;
         }
-        String ownerName = Bukkit.getOfflinePlayer((UUID)team.getOwnerUuid()).getName();
+        String ownerName = this.plugin.getCacheManager().getPlayerName(team.getOwnerUuid());
         String safeOwnerName = ownerName != null ? ownerName : "Unknown";
-        String coOwners = team.getCoOwners().stream().map(co -> Bukkit.getOfflinePlayer((UUID)co.getPlayerUuid()).getName()).filter(Objects::nonNull).collect(Collectors.joining(", "));
+        String coOwners = team.getCoOwners().stream()
+                .map(co -> this.plugin.getCacheManager().getPlayerName(co.getPlayerUuid()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.joining(", "));
         this.plugin.getMessageManager().sendRawMessage((CommandSender)player, this.plugin.getMessageManager().getRawMessage("team_info_header"), new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
         if (this.plugin.getConfigManager().isTeamTagEnabled()) {
             this.plugin.getMessageManager().sendRawMessage((CommandSender)player, this.plugin.getMessageManager().getRawMessage("team_info_tag"), new TagResolver[]{Placeholder.unparsed((String)"tag", (String)team.getTag())});
@@ -705,7 +708,7 @@ TabCompleter {
         this.plugin.getMessageManager().sendRawMessage((CommandSender)player, this.plugin.getMessageManager().getRawMessage("team_info_stats"), new TagResolver[]{Placeholder.unparsed((String)"kills", (String)String.valueOf(team.getKills())), Placeholder.unparsed((String)"deaths", (String)String.valueOf(team.getDeaths())), Placeholder.unparsed((String)"kdr", (String)String.format("%.2f", kdr))});
         this.plugin.getMessageManager().sendRawMessage((CommandSender)player, this.plugin.getMessageManager().getRawMessage("team_info_members"), new TagResolver[]{Placeholder.unparsed((String)"member_count", (String)String.valueOf(team.getMembers().size())), Placeholder.unparsed((String)"max_members", (String)String.valueOf(this.plugin.getConfigManager().getMaxTeamSize()))});
         for (TeamPlayer member : team.getMembers()) {
-            String memberName = Bukkit.getOfflinePlayer((UUID)member.getPlayerUuid()).getName();
+            String memberName = this.plugin.getCacheManager().getPlayerName(member.getPlayerUuid());
             String safeMemberName = memberName != null ? memberName : "Unknown";
             this.plugin.getMessageManager().sendRawMessage((CommandSender)player, this.plugin.getMessageManager().getRawMessage("team_info_member_list"), new TagResolver[]{Placeholder.unparsed((String)"player", (String)safeMemberName)});
         }
@@ -1256,6 +1259,15 @@ TabCompleter {
             try {
                 boolean success = this.plugin.getStorageManager().getStorage().addPlayerToBlacklist(team.getId(), target.getUniqueId(), target.getName(), reason, player.getUniqueId(), player.getName());
                 if (success) {
+                    this.plugin.getCacheManager().invalidateTeamBlacklist(team.getId());
+                    // Eager recache blacklist
+                    this.plugin.getTaskRunner().runAsync(() -> {
+                        try {
+                            List<BlacklistedPlayer> fresh = this.plugin.getStorageManager().getStorage().getTeamBlacklist(team.getId());
+                            this.plugin.getCacheManager().cacheTeamBlacklist(team.getId(), fresh);
+                        } catch (Exception ignored) {
+                        }
+                    });
                     this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
                         try {
                             this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_blacklisted", new TagResolver[]{Placeholder.unparsed((String)"target", (String)target.getName())});
@@ -1320,6 +1332,15 @@ TabCompleter {
                 }
                 boolean success = this.plugin.getStorageManager().getStorage().removePlayerFromBlacklist(team.getId(), target.getUniqueId());
                 if (success) {
+                    this.plugin.getCacheManager().invalidateTeamBlacklist(team.getId());
+                    // Eager recache blacklist
+                    this.plugin.getTaskRunner().runAsync(() -> {
+                        try {
+                            List<BlacklistedPlayer> fresh = this.plugin.getStorageManager().getStorage().getTeamBlacklist(team.getId());
+                            this.plugin.getCacheManager().cacheTeamBlacklist(team.getId(), fresh);
+                        } catch (Exception ignored) {
+                        }
+                    });
                     this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
                         try {
                             this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_unblacklisted", new TagResolver[]{Placeholder.unparsed((String)"target", (String)target.getName())});
@@ -1826,7 +1847,10 @@ TabCompleter {
                 case "transfer": {
                     Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
                     if (team == null) break;
-                    return team.getMembers().stream().map(member -> Bukkit.getOfflinePlayer((UUID)member.getPlayerUuid()).getName()).filter(name -> name != null && name.toLowerCase().startsWith(args[1].toLowerCase())).collect(Collectors.toList());
+                    return team.getMembers().stream()
+                            .map(member -> this.plugin.getCacheManager().getPlayerName(member.getPlayerUuid()))
+                            .filter(name -> name != null && name.toLowerCase().startsWith(args[1].toLowerCase()))
+                            .collect(Collectors.toList());
                 }
                 case "join": {
                     return this.teamManager.getAllTeams().stream().map(Team::getName).filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase())).collect(Collectors.toList());
@@ -1839,30 +1863,50 @@ TabCompleter {
                 case "warp": {
                     Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
                     if (team == null) break;
-                    List<IDataStorage.TeamWarp> warps = this.plugin.getStorageManager().getStorage().getWarps(team.getId());
+                    List<IDataStorage.TeamWarp> warps = this.plugin.getCacheManager().getTeamWarps(team.getId());
+                    if (warps == null) {
+                        // Cache cold: prefetch in background and return empty list now
+                        this.plugin.getTaskRunner().runAsync(() -> {
+                            List<IDataStorage.TeamWarp> fresh = this.plugin.getStorageManager().getStorage().getWarps(team.getId());
+                            this.plugin.getCacheManager().cacheTeamWarps(team.getId(), fresh);
+                        });
+                        return new ArrayList<>();
+                    }
                     return warps.stream().map(IDataStorage.TeamWarp::name).filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase())).collect(Collectors.toList());
                 }
                 case "blacklist": {
                     Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
                     if (team == null) break;
-                    try {
-                        List<BlacklistedPlayer> blacklist = this.plugin.getStorageManager().getStorage().getTeamBlacklist(team.getId());
-                        return blacklist.stream().map(BlacklistedPlayer::getPlayerName).filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase())).collect(Collectors.toList());
-                    } catch (Exception e) {
-                        this.plugin.getLogger().warning("Could not get blacklist for tab completion: " + e.getMessage());
-                        return new ArrayList<String>();
+                    List<BlacklistedPlayer> blacklist = this.plugin.getCacheManager().getTeamBlacklist(team.getId());
+                    if (blacklist == null) {
+                        // Cache cold: prefetch in background and return empty list now
+                        this.plugin.getTaskRunner().runAsync(() -> {
+                            try {
+                                List<BlacklistedPlayer> fresh = this.plugin.getStorageManager().getStorage().getTeamBlacklist(team.getId());
+                                this.plugin.getCacheManager().cacheTeamBlacklist(team.getId(), fresh);
+                            } catch (Exception ignored) {
+                            }
+                        });
+                        return new ArrayList<>();
                     }
+                    return blacklist.stream().map(BlacklistedPlayer::getPlayerName).filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase())).collect(Collectors.toList());
                 }
                 case "unblacklist": {
                     Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
                     if (team == null) break;
-                    try {
-                        List<BlacklistedPlayer> blacklist = this.plugin.getStorageManager().getStorage().getTeamBlacklist(team.getId());
-                        return blacklist.stream().map(BlacklistedPlayer::getPlayerName).filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase())).collect(Collectors.toList());
-                    } catch (Exception e) {
-                        this.plugin.getLogger().warning("Could not get blacklist for tab completion: " + e.getMessage());
-                        return new ArrayList<String>();
+                    List<BlacklistedPlayer> blacklist = this.plugin.getCacheManager().getTeamBlacklist(team.getId());
+                    if (blacklist == null) {
+                        // Cache cold: prefetch in background and return empty list now
+                        this.plugin.getTaskRunner().runAsync(() -> {
+                            try {
+                                List<BlacklistedPlayer> fresh = this.plugin.getStorageManager().getStorage().getTeamBlacklist(team.getId());
+                                this.plugin.getCacheManager().cacheTeamBlacklist(team.getId(), fresh);
+                            } catch (Exception ignored) {
+                            }
+                        });
+                        return new ArrayList<>();
                     }
+                    return blacklist.stream().map(BlacklistedPlayer::getPlayerName).filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase())).collect(Collectors.toList());
                 }
                 case "admin": {
                     if (!this.hasAdminPermission(player)) break;

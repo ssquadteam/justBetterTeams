@@ -59,6 +59,7 @@ InventoryHolder {
         }
         this.plugin.getTaskRunner().runAsync(() -> {
             List<IDataStorage.TeamWarp> warps = this.plugin.getStorageManager().getStorage().getWarps(this.team.getId());
+            this.plugin.getCacheManager().cacheTeamWarps(this.team.getId(), warps);
             this.plugin.getTaskRunner().runOnEntity((Entity)this.viewer, () -> {
                 if (warps.isEmpty()) {
                     ConfigurationSection noWarpsConfig = itemsConfig.getConfigurationSection("no-warps");

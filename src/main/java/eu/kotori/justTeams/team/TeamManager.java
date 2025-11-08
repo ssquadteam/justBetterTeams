@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -34,6 +35,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
 import net.kyori.adventure.text.Component;
@@ -273,6 +275,8 @@ public class TeamManager {
             team.getMembers().forEach(member -> this.playerTeamCache.put(member.getPlayerUuid(), team));
             this.plugin.getLogger().info("Loaded team " + team.getName() + " with " + team.getMembers().size() + " members and " + joinRequests.size() + " join requests");
         }
+        List<UUID> memberUuids = team.getMembers().stream().map(TeamPlayer::getPlayerUuid).collect(Collectors.toList());
+        this.resolvePlayerNames(memberUuids, resolved -> {});
     }
 
     /*
@@ -291,6 +295,10 @@ public class TeamManager {
                 this.teamLastModified.remove(teamId);
             }
         }
+        this.plugin.getCacheManager().invalidateTeamWarps(teamId);
+        this.plugin.getCacheManager().invalidateTeamBlacklist(teamId);
+        this.plugin.getCacheManager().invalidateTeamSessions(teamId);
+        this.plugin.getCacheManager().invalidateJoinRequests(teamId);
     }
 
     /*
@@ -434,6 +442,24 @@ public class TeamManager {
                 if (teamOpt.isPresent()) {
                     Team team = (Team)teamOpt.get();
                     this.loadTeamIntoCache(team);
+                    this.plugin.getTaskRunner().runAsync(() -> {
+                        try {
+                            if (this.plugin.getCacheManager().needsDatabaseSync(team.getId())) {
+                                try {
+                                    List<IDataStorage.TeamWarp> warps = this.storage.getWarps(team.getId());
+                                    this.plugin.getCacheManager().cacheTeamWarps(team.getId(), warps);
+                                } catch (Exception ignored) {
+                                }
+                                try {
+                                    List<BlacklistedPlayer> blacklist = this.storage.getTeamBlacklist(team.getId());
+                                    this.plugin.getCacheManager().cacheTeamBlacklist(team.getId(), blacklist);
+                                } catch (Exception ignored) {
+                                }
+                            }
+                        } catch (Exception e) {
+                            this.plugin.getLogger().warning("Failed to pre-warm caches for team " + team.getName() + ": " + e.getMessage());
+                        }
+                    });
                     this.checkPendingJoinRequests(player, team);
                 }
             });
@@ -718,6 +744,10 @@ public class TeamManager {
                     this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
                         team.addMember(new TeamPlayer(player.getUniqueId(), TeamRole.MEMBER, Instant.now(), false, true, false, true));
                         this.playerTeamCache.put(player.getUniqueId(), team);
+                        this.plugin.getTaskRunner().runAsync(() -> {
+                            Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
+                            this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
+                        });
                         this.messageManager.sendMessage((CommandSender)player, "invite_accepted", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
                         team.broadcast("invite_accepted_broadcast", new TagResolver[]{Placeholder.unparsed((String)"player", (String)player.getName())});
                         EffectsUtil.playSound(player, EffectsUtil.SoundType.SUCCESS);
@@ -777,6 +807,11 @@ public class TeamManager {
             this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
                 team.removeMember(player.getUniqueId());
                 this.playerTeamCache.remove(player.getUniqueId());
+                this.plugin.getCacheManager().invalidateTeamSessions(team.getId());
+                this.plugin.getTaskRunner().runAsync(() -> {
+                    Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
+                    this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
+                });
                 this.messageManager.sendMessage((CommandSender)player, "you_left_team", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
                 team.broadcast("player_left_broadcast", new TagResolver[]{Placeholder.unparsed((String)"player", (String)player.getName())});
                 EffectsUtil.playSound(player, EffectsUtil.SoundType.SUCCESS);
@@ -825,6 +860,11 @@ public class TeamManager {
                     this.plugin.getTaskRunner().run(() -> {
                         team.removeMember(targetUuid);
                         this.playerTeamCache.remove(targetUuid);
+                        this.plugin.getCacheManager().invalidateTeamSessions(team.getId());
+                        this.plugin.getTaskRunner().runAsync(() -> {
+                            Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
+                            this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
+                        });
                         this.messageManager.sendMessage((CommandSender)kicker, "player_kicked", new TagResolver[]{Placeholder.unparsed((String)"target", (String)safeTargetName)});
                         team.broadcast("player_left_broadcast", new TagResolver[]{Placeholder.unparsed((String)"player", (String)safeTargetName)});
                         EffectsUtil.playSound(kicker, EffectsUtil.SoundType.SUCCESS);
@@ -872,6 +912,12 @@ public class TeamManager {
                             if (team.isMember(targetUuid)) {
                                 team.removeMember(targetUuid);
                                 this.playerTeamCache.remove(targetUuid);
+                                this.plugin.getCacheManager().invalidateTeamSessions(team.getId());
+                                // Eager recache sessions
+                                this.plugin.getTaskRunner().runAsync(() -> {
+                                    Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
+                                    this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
+                                });
                                 team.broadcast("player_left_broadcast", new TagResolver[]{Placeholder.unparsed((String)"player", (String)safeTargetName)});
                                 Player targetPlayer = Bukkit.getPlayer((UUID)targetUuid);
                                 if (targetPlayer != null) {
@@ -1800,6 +1846,11 @@ public class TeamManager {
             TeamPlayer newMember = new TeamPlayer(player.getUniqueId(), TeamRole.MEMBER, Instant.now(), false, true, false, true);
             team.addMember(newMember);
             this.playerTeamCache.put(player.getUniqueId(), team);
+            this.plugin.getCacheManager().invalidateTeamSessions(team.getId());
+            this.plugin.getTaskRunner().runAsync(() -> {
+                Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
+                this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
+            });
             this.refreshTeamMembers(team);
             this.messageManager.sendMessage((CommandSender)player, "player_joined_public_team", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
             team.broadcast("player_joined_team", new TagResolver[]{Placeholder.unparsed((String)"player", (String)player.getName())});
@@ -1812,13 +1863,76 @@ public class TeamManager {
         }
     }
 
-    /*
-     * WARNING - Removed try catching itself - possible behaviour change.
-     */
+    public void resolvePlayerName(UUID playerUuid, Consumer<String> callback) {
+        String cached = this.plugin.getCacheManager().getPlayerName(playerUuid);
+        if (cached != null) {
+            callback.accept(cached);
+            return;
+        }
+        this.plugin.getTaskRunner().runAsync(() -> {
+            try {
+                Optional<String> dbName = this.storage.getPlayerNameByUuid(playerUuid);
+                if (dbName.isPresent()) {
+                    String name = dbName.get();
+                    this.plugin.getCacheManager().cachePlayerName(playerUuid, name);
+                    callback.accept(name);
+                    return;
+                }
+            } catch (Exception ignored) {
+            }
+            String name = playerUuid.toString();
+            this.plugin.getCacheManager().cachePlayerName(playerUuid, name);
+            callback.accept(name);
+            this.plugin.getTaskRunner().run(() -> {
+                Player p = Bukkit.getPlayer(playerUuid);
+                if (p != null) {
+                    this.plugin.getCacheManager().cachePlayerName(playerUuid, p.getName());
+                }
+            });
+        });
+    }
+
+    public void resolvePlayerNames(List<UUID> playerUuids, Consumer<Map<UUID, String>> callback) {
+        this.plugin.getTaskRunner().runAsync(() -> {
+            Map<UUID, String> result = new HashMap<>();
+            List<UUID> misses = new ArrayList<>();
+            for (UUID id : playerUuids) {
+                String cached = this.plugin.getCacheManager().getPlayerName(id);
+                if (cached != null) {
+                    result.put(id, cached);
+                } else {
+                    misses.add(id);
+                }
+            }
+            for (UUID id : misses) {
+                try {
+                    Optional<String> dbName = this.storage.getPlayerNameByUuid(id);
+                    if (dbName.isPresent()) {
+                        String name = dbName.get();
+                        this.plugin.getCacheManager().cachePlayerName(id, name);
+                        result.put(id, name);
+                        continue;
+                    }
+                } catch (Exception ignored) {
+                }
+                // Off-thread fallback: UUID string; schedule a main-thread name attempt
+                String name = id.toString();
+                this.plugin.getCacheManager().cachePlayerName(id, name);
+                result.put(id, name);
+                this.plugin.getTaskRunner().run(() -> {
+                    Player p = Bukkit.getPlayer(id);
+                    if (p != null) {
+                        this.plugin.getCacheManager().cachePlayerName(id, p.getName());
+                    }
+                });
+            }
+            callback.accept(result);
+        });
+    }
+
     private void ensureTeamFullyLoaded(Team team) {
         try {
-            Object object = this.cacheLock;
-            synchronized (object) {
+            synchronized (this.cacheLock) {
                 List<TeamPlayer> freshMembers = this.storage.getTeamMembers(team.getId());
                 team.getMembers().clear();
                 team.getMembers().addAll(freshMembers);
@@ -1886,6 +2000,11 @@ public class TeamManager {
         TeamPlayer newMember = new TeamPlayer(targetUuid, TeamRole.MEMBER, Instant.now(), false, true, false, true);
         team.addMember(newMember);
         this.playerTeamCache.put(targetUuid, team);
+        this.plugin.getCacheManager().invalidateTeamSessions(team.getId());
+        this.plugin.getTaskRunner().runAsync(() -> {
+            Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
+            this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
+        });
         team.broadcast("player_joined_team", new TagResolver[]{Placeholder.unparsed((String)"player", (String)(target != null ? target.getName() : "Unknown Player"))});
         if (target != null) {
             this.messageManager.sendMessage((CommandSender)target, "joined_team", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
@@ -1957,6 +2076,11 @@ public class TeamManager {
             String serverName = this.configManager.getServerIdentifier();
             String locationString = this.locationToString(player.getLocation());
             if (this.storage.setTeamWarp(team.getId(), warpName, locationString, serverName, password)) {
+                this.plugin.getCacheManager().invalidateTeamWarps(team.getId());
+                this.plugin.getTaskRunner().runAsync(() -> {
+                    List<IDataStorage.TeamWarp> warps = this.storage.getTeamWarps(team.getId());
+                    this.plugin.getCacheManager().cacheTeamWarps(team.getId(), warps);
+                });
                 this.publishCrossServerUpdate(team.getId(), "WARP_CREATED", player.getUniqueId().toString(), warpName);
                 this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> this.messageManager.sendMessage((CommandSender)player, "warp_set", new TagResolver[]{Placeholder.unparsed((String)"warp", (String)warpName)}));
             }
@@ -1983,6 +2107,11 @@ public class TeamManager {
                 return;
             }
             if (this.storage.deleteTeamWarp(team.getId(), warpName)) {
+                this.plugin.getCacheManager().invalidateTeamWarps(team.getId());
+                this.plugin.getTaskRunner().runAsync(() -> {
+                    List<IDataStorage.TeamWarp> warps = this.storage.getTeamWarps(team.getId());
+                    this.plugin.getCacheManager().cacheTeamWarps(team.getId(), warps);
+                });
                 this.publishCrossServerUpdate(team.getId(), "WARP_DELETED", player.getUniqueId().toString(), warpName);
                 this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> this.messageManager.sendMessage((CommandSender)player, "warp_deleted", new TagResolver[]{Placeholder.unparsed((String)"warp", (String)warpName)}));
             }

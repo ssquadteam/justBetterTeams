@@ -13,7 +13,9 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -78,10 +80,12 @@ InventoryHolder {
                     this.inventory.setItem(i, border);
                 }
                 int memberSlot = 9;
-                for (TeamPlayer member : this.team.getSortedMembers(this.currentSort)) {
-                    if (memberSlot >= 45) break;
-                    this.inventory.setItem(memberSlot++, this.createMemberHead(member, itemsConfig.getConfigurationSection("player-head")));
-                }
+                List<TeamPlayer> snapshotMembers = new ArrayList<>(this.team.getSortedMembers(this.currentSort));
+                ConfigurationSection headConfig = itemsConfig.getConfigurationSection("player-head");
+                this.plugin.getTaskRunner().runAsync(() -> {
+                    List<MemberDisplayData> memberData = this.fetchMemberDisplayData(snapshotMembers);
+                    this.plugin.getTaskRunner().runOnEntity((Entity)this.viewer, () -> this.populateMemberHeads(snapshotMembers, memberData, headConfig));
+                });
                 if ((viewerMember = this.team.getMember(this.viewer.getUniqueId())) == null) {
                     this.viewer.closeInventory();
                     return;
@@ -200,17 +204,8 @@ InventoryHolder {
         return text.replace("<balance>", formatter.format(this.team.getBalance())).replace("<status>", pvpStatus).replace("<permission_prompt>", pvpPrompt).replace("<sort_status_join_date>", this.getSortLore(Team.SortType.JOIN_DATE)).replace("<sort_status_alphabetical>", this.getSortLore(Team.SortType.ALPHABETICAL)).replace("<sort_status_online_status>", this.getSortLore(Team.SortType.ONLINE_STATUS));
     }
 
-    private ItemStack createMemberHead(TeamPlayer member, ConfigurationSection headConfig) {
-        String gamertag;
-        String displayServer;
-        String playerServer;
-        String currentServer;
-        Optional<IDataStorage.PlayerSession> sessionOpt;
-        String playerServer2;
-        String currentServer2;
-        Optional<IDataStorage.PlayerSession> sessionOpt2;
-        String playerName = Bukkit.getOfflinePlayer((UUID)member.getPlayerUuid()).getName();
-        boolean isBedrockPlayer = this.plugin.getBedrockSupport() != null && this.plugin.getBedrockSupport().isBedrockPlayer(member.getPlayerUuid());
+    private ItemStack createMemberHead(MemberDisplayData data, ConfigurationSection headConfig) {
+        boolean isBedrockPlayer = data.isBedrockPlayer;
         String platformIndicator = "";
         if (this.plugin.getGuiConfigManager().getPlaceholder("platform.show_in_gui", "true").equals("true")) {
             if (isBedrockPlayer && this.plugin.getGuiConfigManager().getPlaceholder("platform.bedrock.enabled", "true").equals("true")) {
@@ -219,35 +214,53 @@ InventoryHolder {
                 platformIndicator = this.plugin.getGuiConfigManager().getPlaceholder("platform.java.format", " <#00FF00>[JE]</#00FF00>");
             }
         }
-        Object crossServerStatus = "";
-        if (member.isOnline() && this.plugin.getConfigManager().isCrossServerSyncEnabled() && this.plugin.getConfigManager().getBoolean("features.show_cross_server_status", true) && (sessionOpt2 = this.plugin.getStorageManager().getStorage().getPlayerSession(member.getPlayerUuid())).isPresent() && !(currentServer2 = this.plugin.getConfigManager().getServerIdentifier()).equalsIgnoreCase(playerServer2 = sessionOpt2.get().serverName())) {
-            String displayServer2 = this.plugin.getStorageManager().getStorage().getServerAlias(playerServer2).orElse(playerServer2);
-            crossServerStatus = " <gray>(<yellow>" + displayServer2 + "</yellow>)</gray>";
+        String crossServerStatus = "";
+        String currentServer = this.plugin.getConfigManager().getServerIdentifier();
+        if (data.isOnline && this.plugin.getConfigManager().isCrossServerSyncEnabled() && this.plugin.getConfigManager().getBoolean("features.show_cross_server_status", true) && data.serverName != null && !currentServer.equalsIgnoreCase(data.serverName)) {
+            crossServerStatus = " <gray>(<yellow>" + data.serverName + "</yellow>)</gray>";
         }
-        String nameFormat = member.isOnline() ? headConfig.getString("online-name-format", "<green><player>") : headConfig.getString("offline-name-format", "<gray><player>");
-        String name = nameFormat.replace("<status_indicator>", this.getStatusIndicator(member.isOnline())).replace("<role_icon>", this.getRoleIcon(member.getRole())).replace("<player>", playerName != null ? playerName : "Unknown") + platformIndicator + (String)crossServerStatus;
-        String joinDateStr = this.formatJoinDate(member.getJoinDate(), playerName);
-        String serverInfo = member.isOnline() && this.plugin.getConfigManager().isCrossServerSyncEnabled() && this.plugin.getConfigManager().getBoolean("features.show_cross_server_status", true) ? ((sessionOpt = this.plugin.getStorageManager().getStorage().getPlayerSession(member.getPlayerUuid())).isPresent() ? (!(currentServer = this.plugin.getConfigManager().getServerIdentifier()).equalsIgnoreCase(playerServer = sessionOpt.get().serverName()) ? (displayServer = this.plugin.getStorageManager().getStorage().getServerAlias(playerServer).orElse(playerServer)) : currentServer) : "Local") : (!member.isOnline() ? "<dark_gray>Offline</dark_gray>" : "Local");
-        ArrayList<String> loreLines = new ArrayList<String>(headConfig.getStringList("lore").stream().map(line -> line.replace("<role>", this.getRoleName(member.getRole())).replace("<joindate>", joinDateStr).replace("<server>", serverInfo)).collect(Collectors.toList()));
-        if (isBedrockPlayer && this.plugin.getGuiConfigManager().getPlaceholder("platform.show_gamertags", "true").equals("true") && (gamertag = this.plugin.getBedrockSupport().getBedrockGamertag(member.getPlayerUuid())) != null && !gamertag.equals(playerName)) {
+        String onlineFmt = "<green><player>";
+        String offlineFmt = "<gray><player>";
+        List<String> defaultLore = List.of("<gray>Role:</gray> <role>", "<gray>Joined:</gray> <joindate>", "<gray>Server:</gray> <server>");
+        if (headConfig != null) {
+            onlineFmt = headConfig.getString("online-name-format", onlineFmt);
+            offlineFmt = headConfig.getString("offline-name-format", offlineFmt);
+            defaultLore = headConfig.getStringList("lore");
+        }
+        String nameFormat = data.isOnline ? onlineFmt : offlineFmt;
+        String name = nameFormat
+                .replace("<status_indicator>", this.getStatusIndicator(data.isOnline))
+                .replace("<role_icon>", this.getRoleIcon(data.role))
+                .replace("<player>", data.playerName != null ? data.playerName : "Unknown")
+                + platformIndicator + crossServerStatus;
+        String joinDateStr = this.formatJoinDate(data.joinDate, data.playerName);
+        String serverInfo = data.isOnline && this.plugin.getConfigManager().isCrossServerSyncEnabled() && this.plugin.getConfigManager().getBoolean("features.show_cross_server_status", true)
+                ? (data.serverName != null ? (currentServer.equalsIgnoreCase(data.serverName) ? currentServer : data.serverName) : "Local")
+                : (!data.isOnline ? "<dark_gray>Offline</dark_gray>" : "Local");
+        ArrayList<String> loreLines = new ArrayList<>(defaultLore.stream()
+                .map(line -> line.replace("<role>", this.getRoleName(data.role))
+                        .replace("<joindate>", joinDateStr)
+                        .replace("<server>", serverInfo))
+                .collect(Collectors.toList()));
+        if (isBedrockPlayer && this.plugin.getGuiConfigManager().getPlaceholder("platform.show_gamertags", "true").equals("true") && data.gamertag != null && !data.gamertag.equals(data.playerName)) {
             String gamertagColor = this.plugin.getGuiConfigManager().getPlaceholder("platform.bedrock.color", "#00D4FF");
-            loreLines.add("<gray>Gamertag: <" + gamertagColor + ">" + gamertag + "</" + gamertagColor + ">");
+            loreLines.add("<gray>Gamertag: <" + gamertagColor + ">" + data.gamertag + "</" + gamertagColor + ">");
         }
-        ItemBuilder builder = new ItemBuilder(Material.PLAYER_HEAD).asPlayerHead(member.getPlayerUuid()).withName(name).withLore(loreLines);
+        ItemBuilder builder = new ItemBuilder(Material.PLAYER_HEAD).asPlayerHead(data.playerUuid).withName(name).withLore(loreLines);
         TeamPlayer viewerMember = this.team.getMember(this.viewer.getUniqueId());
         if (viewerMember != null) {
             boolean canEdit = false;
-            boolean isSelfClick = member.getPlayerUuid().equals(this.viewer.getUniqueId());
+            boolean isSelfClick = data.playerUuid.equals(this.viewer.getUniqueId());
             if (viewerMember.getRole() == TeamRole.OWNER) {
                 canEdit = !isSelfClick;
             } else if (viewerMember.getRole() == TeamRole.CO_OWNER) {
-                boolean bl = canEdit = !isSelfClick && member.getRole() == TeamRole.MEMBER;
+                canEdit = !isSelfClick && data.role == TeamRole.MEMBER;
             }
             if (canEdit) {
                 builder.withAction("player-head");
             }
         }
-        if (member.getRole() == TeamRole.OWNER) {
+        if (data.role == TeamRole.OWNER) {
             builder.withGlow();
         }
         return builder.build();
@@ -310,12 +323,98 @@ InventoryHolder {
         this.initializeItems();
     }
 
+    private List<MemberDisplayData> fetchMemberDisplayData(List<TeamPlayer> members) {
+        ArrayList<MemberDisplayData> list = new ArrayList<>();
+        try {
+            Map<UUID, IDataStorage.PlayerSession> sessions = this.plugin.getStorageManager().getStorage().getTeamPlayerSessions(this.team.getId());
+            this.plugin.getCacheManager().cacheTeamSessions(this.team.getId(), sessions);
+            Map<String, String> aliases = this.plugin.getStorageManager().getStorage().getAllServerAliases();
+            String currentServer = this.plugin.getConfigManager().getServerIdentifier();
+            for (TeamPlayer member : members) {
+                UUID id = member.getPlayerUuid();
+                String name = this.plugin.getCacheManager().getPlayerName(id);
+                if (name == null) {
+                    // Fallback to DB then UUID string; avoid Bukkit API off-main thread
+                    Optional<String> dbName = this.plugin.getStorageManager().getStorage().getPlayerNameByUuid(id);
+                    if (dbName.isPresent()) {
+                        name = dbName.get();
+                        this.plugin.getCacheManager().cachePlayerName(id, name);
+                    } else {
+                        name = id.toString();
+                        this.plugin.getCacheManager().cachePlayerName(id, name);
+                    }
+                }
+                boolean isBedrock = this.plugin.getBedrockSupport() != null && this.plugin.getBedrockSupport().isBedrockPlayer(id);
+                String gamertag = null;
+                if (isBedrock) {
+                    gamertag = this.plugin.getBedrockSupport().getBedrockGamertag(id);
+                }
+                String serverName = null;
+                IDataStorage.PlayerSession session = sessions.get(id);
+                if (session != null) {
+                    String raw = session.serverName();
+                    String alias = aliases.getOrDefault(raw, raw);
+                    serverName = currentServer.equalsIgnoreCase(raw) ? currentServer : alias;
+                }
+                boolean isOnline = sessions.containsKey(id);
+                list.add(new MemberDisplayData(id, name, isOnline, member.getRole(), member.getJoinDate(), serverName, isBedrock, gamertag));
+            }
+        } catch (Exception e) {
+            this.plugin.getLogger().warning("Failed to prefetch member data: " + e.getMessage());
+        }
+        return list;
+    }
+    private void populateMemberHeads(List<TeamPlayer> orderedMembers, List<MemberDisplayData> data, ConfigurationSection headConfig) {
+        Map<UUID, MemberDisplayData> byId = new HashMap<>();
+        for (MemberDisplayData d : data) byId.put(d.playerUuid, d);
+        int memberSlot = 9;
+        if (this.currentSort == Team.SortType.ALPHABETICAL) {
+            List<MemberDisplayData> sorted = new ArrayList<>(data);
+            sorted.sort((a, b) -> {
+                String an = a.playerName != null ? a.playerName.toLowerCase() : "";
+                String bn = b.playerName != null ? b.playerName.toLowerCase() : "";
+                return an.compareTo(bn);
+            });
+            for (MemberDisplayData d : sorted) {
+                if (memberSlot >= 45) break;
+                this.inventory.setItem(memberSlot++, this.createMemberHead(d, headConfig));
+            }
+            return;
+        }
+        for (TeamPlayer member : orderedMembers) {
+            if (memberSlot >= 45) break;
+            MemberDisplayData d = byId.getOrDefault(member.getPlayerUuid(), new MemberDisplayData(member.getPlayerUuid(), "Loading...", data.stream().anyMatch(md -> md.playerUuid.equals(member.getPlayerUuid()) && md.isOnline), member.getRole(), member.getJoinDate(), null, false, null));
+            this.inventory.setItem(memberSlot++, this.createMemberHead(d, headConfig));
+        }
+    }
+
     public Team getTeam() {
         return this.team;
     }
 
     public Inventory getInventory() {
         return this.inventory;
+    }
+
+    static class MemberDisplayData {
+        final UUID playerUuid;
+        final String playerName;
+        final boolean isOnline;
+        final TeamRole role;
+        final Instant joinDate;
+        final String serverName;
+        final boolean isBedrockPlayer;
+        final String gamertag;
+        MemberDisplayData(UUID playerUuid, String playerName, boolean isOnline, TeamRole role, Instant joinDate, String serverName, boolean isBedrockPlayer, String gamertag) {
+            this.playerUuid = playerUuid;
+            this.playerName = playerName;
+            this.isOnline = isOnline;
+            this.role = role;
+            this.joinDate = joinDate;
+            this.serverName = serverName;
+            this.isBedrockPlayer = isBedrockPlayer;
+            this.gamertag = gamertag;
+        }
     }
 }
 

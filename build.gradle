@@ -84,6 +84,13 @@ tasks.processResources {
 tasks.shadowJar {
     archiveClassifier.set('')
 
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    exclude 'META-INF/LICENSE*', 'META-INF/NOTICE*', 'LICENSE', 'LICENSE.*', 'NOTICE', 'NOTICE.*', 'META-INF/INDEX.LIST'
+
+    mergeServiceFiles()
+
     relocate 'com.zaxxer.hikari', 'eu.kotori.justTeams.libs.hikari'
     relocate 'org.h2', 'eu.kotori.justTeams.libs.h2'
     relocate 'redis.clients', 'eu.kotori.justTeams.libs.jedis'

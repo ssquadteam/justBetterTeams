@@ -33,6 +33,7 @@ import eu.kotori.justTeams.util.StartupMessage;
 import eu.kotori.justTeams.util.TaskRunner;
 import eu.kotori.justTeams.util.VersionChecker;
 import eu.kotori.justTeams.util.WebhookHelper;
+import eu.kotori.justTeams.util.CacheManager;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -76,6 +77,7 @@ extends JavaPlugin {
     private FeatureRestrictionManager featureRestrictionManager;
     private DataRecoveryManager dataRecoveryManager;
     private VersionChecker versionChecker;
+    private CacheManager cacheManager;
     public boolean updateAvailable = false;
     public String latestVersion = "";
 
@@ -132,6 +134,13 @@ extends JavaPlugin {
             }
         } catch (Exception e) {
             logger.warning("Error cancelling tasks: " + e.getMessage());
+        }
+        try {
+            if (this.cacheManager != null) {
+                this.cacheManager.cleanup();
+            }
+        } catch (Exception e) {
+            logger.warning("Error cleaning up caches: " + e.getMessage());
         }
         try {
             if (this.teamManager != null) {
@@ -236,6 +245,7 @@ extends JavaPlugin {
         this.featureRestrictionManager = new FeatureRestrictionManager(this);
         this.dataRecoveryManager = new DataRecoveryManager(this);
         this.versionChecker = new VersionChecker(this);
+        this.cacheManager = new CacheManager(this);
         this.versionChecker.check();
         this.teamManager.cleanupEnderChestLocksOnStartup();
         if (this.storageManager.getStorage() instanceof DatabaseStorage) {
@@ -494,6 +504,10 @@ extends JavaPlugin {
 
     public BedrockSupport getBedrockSupport() {
         return this.bedrockSupport;
+    }
+
+    public CacheManager getCacheManager() {
+        return this.cacheManager;
     }
 
     private boolean setupEconomy() {

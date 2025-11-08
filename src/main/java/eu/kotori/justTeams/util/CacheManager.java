@@ -4,6 +4,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import eu.kotori.justTeams.JustTeams;
 import eu.kotori.justTeams.team.BlacklistedPlayer;
+import eu.kotori.justTeams.storage.IDataStorage;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -16,6 +17,8 @@ public class CacheManager {
     private final Cache<Integer, List<UUID>> joinRequestCache;
     private final Cache<String, Boolean> permissionCache;
     private final Cache<UUID, String> playerNameCache;
+    private final Cache<Integer, List<IDataStorage.TeamWarp>> warpsCache;
+    private final Cache<Integer, Map<UUID, IDataStorage.PlayerSession>> teamSessionsCache;
     private final Map<Integer, Long> lastDatabaseSync = new ConcurrentHashMap<Integer, Long>();
     private final long cacheExpiry;
     private final long syncCooldown;
@@ -28,6 +31,8 @@ public class CacheManager {
         this.joinRequestCache = CacheBuilder.newBuilder().maximumSize(1000L).expireAfterWrite(this.cacheExpiry, TimeUnit.SECONDS).build();
         this.permissionCache = CacheBuilder.newBuilder().maximumSize(5000L).expireAfterWrite(this.cacheExpiry, TimeUnit.SECONDS).build();
         this.playerNameCache = CacheBuilder.newBuilder().maximumSize(10000L).expireAfterWrite(1800L, TimeUnit.SECONDS).build();
+        this.warpsCache = CacheBuilder.newBuilder().maximumSize(2000L).expireAfterWrite(this.cacheExpiry, TimeUnit.SECONDS).build();
+        this.teamSessionsCache = CacheBuilder.newBuilder().maximumSize(2000L).expireAfterWrite(300L, TimeUnit.SECONDS).build();
     }
 
     public List<BlacklistedPlayer> getTeamBlacklist(int teamId) {
@@ -72,6 +77,30 @@ public class CacheManager {
         this.playerNameCache.put(playerUuid, name);
     }
 
+    public List<IDataStorage.TeamWarp> getTeamWarps(int teamId) {
+        return this.warpsCache.getIfPresent(teamId);
+    }
+
+    public void cacheTeamWarps(int teamId, List<IDataStorage.TeamWarp> warps) {
+        this.warpsCache.put(teamId, warps);
+    }
+
+    public void invalidateTeamWarps(int teamId) {
+        this.warpsCache.invalidate(teamId);
+    }
+
+    public Map<UUID, IDataStorage.PlayerSession> getTeamSessions(int teamId) {
+        return this.teamSessionsCache.getIfPresent(teamId);
+    }
+
+    public void cacheTeamSessions(int teamId, Map<UUID, IDataStorage.PlayerSession> sessions) {
+        this.teamSessionsCache.put(teamId, sessions);
+    }
+
+    public void invalidateTeamSessions(int teamId) {
+        this.teamSessionsCache.invalidate(teamId);
+    }
+
     public boolean needsDatabaseSync(int teamId) {
         Long lastSync = this.lastDatabaseSync.get(teamId);
         return lastSync == null || System.currentTimeMillis() - lastSync > this.syncCooldown;
@@ -86,6 +115,8 @@ public class CacheManager {
         this.joinRequestCache.cleanUp();
         this.permissionCache.cleanUp();
         this.playerNameCache.cleanUp();
+        this.warpsCache.cleanUp();
+        this.teamSessionsCache.cleanUp();
         long cutoff = System.currentTimeMillis() - this.syncCooldown * 2L;
         this.lastDatabaseSync.entrySet().removeIf(entry -> (Long)entry.getValue() < cutoff);
     }
@@ -95,11 +126,13 @@ public class CacheManager {
         this.joinRequestCache.invalidateAll();
         this.permissionCache.invalidateAll();
         this.playerNameCache.invalidateAll();
+        this.warpsCache.invalidateAll();
+        this.teamSessionsCache.invalidateAll();
         this.lastDatabaseSync.clear();
     }
 
     public CacheStats getStats() {
-        return new CacheStats(this.blacklistCache.size(), this.joinRequestCache.size(), this.permissionCache.size(), this.playerNameCache.size(), this.lastDatabaseSync.size());
+        return new CacheStats(this.blacklistCache.size(), this.joinRequestCache.size(), this.permissionCache.size(), this.playerNameCache.size(), this.warpsCache.size(), this.teamSessionsCache.size(), this.lastDatabaseSync.size());
     }
 
     public static class CacheStats {
@@ -107,13 +140,17 @@ public class CacheManager {
         public final long joinRequestCacheSize;
         public final long permissionCacheSize;
         public final long playerNameCacheSize;
+        public final long warpsCacheSize;
+        public final long teamSessionsCacheSize;
         public final int syncTrackingSize;
 
-        public CacheStats(long blacklistCacheSize, long joinRequestCacheSize, long permissionCacheSize, long playerNameCacheSize, int syncTrackingSize) {
+        public CacheStats(long blacklistCacheSize, long joinRequestCacheSize, long permissionCacheSize, long playerNameCacheSize, long warpsCacheSize, long teamSessionsCacheSize, int syncTrackingSize) {
             this.blacklistCacheSize = blacklistCacheSize;
             this.joinRequestCacheSize = joinRequestCacheSize;
             this.permissionCacheSize = permissionCacheSize;
             this.playerNameCacheSize = playerNameCacheSize;
+            this.warpsCacheSize = warpsCacheSize;
+            this.teamSessionsCacheSize = teamSessionsCacheSize;
             this.syncTrackingSize = syncTrackingSize;
         }
     }

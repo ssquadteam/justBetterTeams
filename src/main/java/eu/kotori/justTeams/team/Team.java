@@ -307,8 +307,8 @@ implements InventoryHolder {
     public static enum SortType {
         JOIN_DATE(Comparator.comparing(TeamPlayer::getJoinDate)),
         ALPHABETICAL(Comparator.comparing(p -> {
-            String name = Bukkit.getOfflinePlayer((UUID)p.getPlayerUuid()).getName();
-            return name != null ? name.toLowerCase() : "";
+            String name = JustTeams.getInstance().getCacheManager().getPlayerName(p.getPlayerUuid());
+            return name != null ? name.toLowerCase() : p.getPlayerUuid().toString();
         })),
         ONLINE_STATUS(Comparator.comparing(TeamPlayer::isOnline).reversed());
 
