@@ -1,5 +1,10 @@
 package eu.kotori.justTeams.util;
+
 import eu.kotori.justTeams.JustTeams;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -12,83 +17,129 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataType;
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
+import org.bukkit.plugin.Plugin;
+
 public class ItemBuilder {
     private final ItemStack itemStack;
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
-    private static final NamespacedKey ACTION_KEY = JustTeams.getActionKey();
+
+    private static NamespacedKey getActionKey() {
+        NamespacedKey key = JustTeams.getActionKey();
+        if (key == null) {
+            throw new IllegalStateException("JustTeams plugin not initialized - actionKey is null");
+        }
+        return key;
+    }
+
     public ItemBuilder(Material material) {
         this.itemStack = new ItemStack(material);
     }
+
     public ItemBuilder(ItemStack itemStack) {
         this.itemStack = itemStack.clone();
     }
+
     public ItemBuilder withName(String name) {
-        ItemMeta meta = itemStack.getItemMeta();
+        ItemMeta meta = this.itemStack.getItemMeta();
         if (meta != null) {
-            Component component = miniMessage.deserialize(name)
-                    .decoration(TextDecoration.ITALIC, false);
+            Component component = this.miniMessage.deserialize((Object)name).decoration(TextDecoration.ITALIC, false);
             meta.displayName(component);
-            itemStack.setItemMeta(meta);
+            this.itemStack.setItemMeta(meta);
         }
         return this;
     }
-    public ItemBuilder withLore(String... loreLines) {
-        return withLore(Arrays.asList(loreLines));
+
+    public ItemBuilder withLore(String ... loreLines) {
+        return this.withLore(Arrays.asList(loreLines));
     }
+
     public ItemBuilder withLore(List<String> loreLines) {
-        ItemMeta meta = itemStack.getItemMeta();
+        ItemMeta meta = this.itemStack.getItemMeta();
         if (meta != null) {
-            List<Component> lore = loreLines.stream()
-                    .map(line -> miniMessage.deserialize(line).decoration(TextDecoration.ITALIC, false))
-                    .collect(Collectors.toList());
+            List lore = loreLines.stream().map(line -> this.miniMessage.deserialize(line).decoration(TextDecoration.ITALIC, false)).collect(Collectors.toList());
             meta.lore(lore);
-            itemStack.setItemMeta(meta);
+            this.itemStack.setItemMeta(meta);
         }
         return this;
     }
+
     public ItemBuilder asPlayerHead(UUID playerUuid) {
-        if (itemStack.getType() == Material.PLAYER_HEAD && itemStack.getItemMeta() instanceof SkullMeta skullMeta) {
-            skullMeta.setPlayerProfile(Bukkit.createProfile(playerUuid));
-            itemStack.setItemMeta(skullMeta);
+        ItemMeta itemMeta;
+        if (this.itemStack.getType() == Material.PLAYER_HEAD && (itemMeta = this.itemStack.getItemMeta()) instanceof SkullMeta) {
+            SkullMeta skullMeta = (SkullMeta)itemMeta;
+            try {
+                JustTeams plugin = JustTeams.getInstance();
+                if (plugin != null && plugin.getBedrockSupport() != null && plugin.getBedrockSupport().isBedrockPlayer(playerUuid)) {
+                    UUID javaUuid = plugin.getBedrockSupport().getJavaEditionUuid(playerUuid);
+                    if (javaUuid != null && !javaUuid.equals(playerUuid)) {
+                        skullMeta.setPlayerProfile(Bukkit.createProfile((UUID)javaUuid));
+                    } else {
+                        skullMeta.setPlayerProfile(Bukkit.createProfile((UUID)playerUuid));
+                    }
+                } else {
+                    skullMeta.setPlayerProfile(Bukkit.createProfile((UUID)playerUuid));
+                }
+                this.itemStack.setItemMeta((ItemMeta)skullMeta);
+            } catch (Exception e) {
+                skullMeta.setPlayerProfile(Bukkit.createProfile((UUID)playerUuid));
+                this.itemStack.setItemMeta((ItemMeta)skullMeta);
+            }
         }
         return this;
     }
+
+    public ItemBuilder asPlayerHeadBedrockCompatible(UUID playerUuid, Material bedrockFallback) {
+        try {
+            JustTeams plugin = JustTeams.getInstance();
+            if (plugin != null && plugin.getBedrockSupport() != null && plugin.getBedrockSupport().isBedrockPlayer(playerUuid)) {
+                if (bedrockFallback != null && bedrockFallback != Material.PLAYER_HEAD) {
+                    ItemStack fallbackItem = new ItemStack(bedrockFallback);
+                    return new ItemBuilder(fallbackItem);
+                }
+                return this.asPlayerHead(playerUuid);
+            }
+            return this.asPlayerHead(playerUuid);
+        } catch (Exception e) {
+            return this.asPlayerHead(playerUuid);
+        }
+    }
+
     public ItemBuilder withGlow() {
-        itemStack.addUnsafeEnchantment(Enchantment.UNBREAKING, 1);
-        ItemMeta meta = itemStack.getItemMeta();
+        this.itemStack.addUnsafeEnchantment(Enchantment.UNBREAKING, 1);
+        ItemMeta meta = this.itemStack.getItemMeta();
         if (meta != null) {
-            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-            itemStack.setItemMeta(meta);
+            meta.addItemFlags(new ItemFlag[]{ItemFlag.HIDE_ENCHANTS});
+            this.itemStack.setItemMeta(meta);
         }
         return this;
     }
+
     public ItemBuilder withAction(String action) {
         if (action == null || action.isEmpty()) {
             return this;
         }
-        ItemMeta meta = itemStack.getItemMeta();
+        ItemMeta meta = this.itemStack.getItemMeta();
         if (meta != null) {
-            meta.getPersistentDataContainer().set(ACTION_KEY, PersistentDataType.STRING, action);
-            itemStack.setItemMeta(meta);
+            meta.getPersistentDataContainer().set(ItemBuilder.getActionKey(), PersistentDataType.STRING, (Object)action);
+            this.itemStack.setItemMeta(meta);
         }
         return this;
     }
+
     public ItemBuilder withData(String key, String value) {
         if (key == null || value == null) {
             return this;
         }
-        ItemMeta meta = itemStack.getItemMeta();
+        ItemMeta meta = this.itemStack.getItemMeta();
         if (meta != null) {
-            meta.getPersistentDataContainer().set(new NamespacedKey(JustTeams.getInstance(), key), PersistentDataType.STRING, value);
-            itemStack.setItemMeta(meta);
+            meta.getPersistentDataContainer().set(new NamespacedKey((Plugin)JustTeams.getInstance(), key), PersistentDataType.STRING, (Object)value);
+            this.itemStack.setItemMeta(meta);
         }
         return this;
     }
+
     public ItemStack build() {
-        return itemStack;
+        return this.itemStack;
     }
 }
+

@@ -1,7 +1,11 @@
 package eu.kotori.justTeams.listeners;
+
 import eu.kotori.justTeams.JustTeams;
 import eu.kotori.justTeams.team.Team;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -11,104 +15,128 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.inventory.Inventory;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-public class TeamEnderChestListener implements Listener {
+import org.bukkit.inventory.InventoryHolder;
+
+public class TeamEnderChestListener
+implements Listener {
     private final JustTeams plugin;
-    private final ConcurrentHashMap<UUID, Long> lastUpdateTime = new ConcurrentHashMap<>();
-    private static final long UPDATE_COOLDOWN = 100;
-    private static final long SLOT_UPDATE_COOLDOWN = 50;
+    private final ConcurrentHashMap<UUID, Long> lastUpdateTime = new ConcurrentHashMap();
+    private static final long UPDATE_COOLDOWN = 100L;
+    private static final long SLOT_UPDATE_COOLDOWN = 50L;
+
     public TeamEnderChestListener(JustTeams plugin) {
         this.plugin = plugin;
     }
+
+    @EventHandler(priority=EventPriority.MONITOR)
     public void onInventoryOpen(InventoryOpenEvent event) {
-        if (!(event.getInventory().getHolder() instanceof Team team)) return;
-        Player player = (Player) event.getPlayer();
+        InventoryHolder inventoryHolder = event.getInventory().getHolder();
+        if (!(inventoryHolder instanceof Team)) {
+            return;
+        }
+        Team team = (Team)inventoryHolder;
+        Player player = (Player)event.getPlayer();
         team.addEnderChestViewer(player.getUniqueId());
-        if (plugin.getConfigManager().isDebugEnabled()) {
-            plugin.getLogger().info("Player " + player.getName() + " opened team enderchest for team " + team.getName() +
-                " (viewers: " + team.getEnderChestViewers().size() + ")");
+        if (this.plugin.getConfigManager().isDebugEnabled()) {
+            this.plugin.getLogger().info("Player " + player.getName() + " opened team enderchest for team " + team.getName() + " (viewers: " + team.getEnderChestViewers().size() + ")");
         }
     }
+
+    @EventHandler(priority=EventPriority.MONITOR)
     public void onInventoryClick(InventoryClickEvent event) {
-        if (!(event.getInventory().getHolder() instanceof Team team)) return;
-        Player player = (Player) event.getWhoClicked();
-        long currentTime = System.currentTimeMillis();
-        if (lastUpdateTime.containsKey(player.getUniqueId())) {
-            if (currentTime - lastUpdateTime.get(player.getUniqueId()) < SLOT_UPDATE_COOLDOWN) {
-                return;
-            }
+        InventoryHolder inventoryHolder = event.getInventory().getHolder();
+        if (!(inventoryHolder instanceof Team)) {
+            return;
         }
-        handleInventoryChange(team, player, event.getInventory(), "click");
-        lastUpdateTime.put(player.getUniqueId(), currentTime);
+        Team team = (Team)inventoryHolder;
+        Player player = (Player)event.getWhoClicked();
+        long currentTime = System.currentTimeMillis();
+        if (this.lastUpdateTime.containsKey(player.getUniqueId()) && currentTime - this.lastUpdateTime.get(player.getUniqueId()) < 50L) {
+            return;
+        }
+        this.handleInventoryChange(team, player, event.getInventory(), "click");
+        this.lastUpdateTime.put(player.getUniqueId(), currentTime);
     }
+
+    @EventHandler(priority=EventPriority.MONITOR)
     public void onInventoryDrag(InventoryDragEvent event) {
-        if (!(event.getInventory().getHolder() instanceof Team team)) return;
-        Player player = (Player) event.getWhoClicked();
+        InventoryHolder inventoryHolder = event.getInventory().getHolder();
+        if (!(inventoryHolder instanceof Team)) {
+            return;
+        }
+        Team team = (Team)inventoryHolder;
+        Player player = (Player)event.getWhoClicked();
         long currentTime = System.currentTimeMillis();
-        if (lastUpdateTime.containsKey(player.getUniqueId())) {
-            if (currentTime - lastUpdateTime.get(player.getUniqueId()) < SLOT_UPDATE_COOLDOWN) {
-                return;
-            }
+        if (this.lastUpdateTime.containsKey(player.getUniqueId()) && currentTime - this.lastUpdateTime.get(player.getUniqueId()) < 50L) {
+            return;
         }
-        handleInventoryChange(team, player, event.getInventory(), "drag");
-        lastUpdateTime.put(player.getUniqueId(), currentTime);
+        this.handleInventoryChange(team, player, event.getInventory(), "drag");
+        this.lastUpdateTime.put(player.getUniqueId(), currentTime);
     }
+
+    @EventHandler(priority=EventPriority.MONITOR)
     public void onInventoryClose(InventoryCloseEvent event) {
-        if (!(event.getInventory().getHolder() instanceof Team team)) return;
-        Player player = (Player) event.getPlayer();
-        team.removeEnderChestViewer(player.getUniqueId());
-        if (plugin.getConfigManager().isDebugEnabled()) {
-            plugin.getLogger().info("Player " + player.getName() + " closed team enderchest for team " + team.getName() +
-                " (remaining viewers: " + team.getEnderChestViewers().size() + ")");
+        InventoryHolder inventoryHolder = event.getInventory().getHolder();
+        if (!(inventoryHolder instanceof Team)) {
+            return;
         }
-        plugin.getTaskRunner().runAsync(() -> {
-            try {
-                plugin.getTeamManager().saveEnderChest(team);
-            } catch (Exception e) {
-                plugin.getLogger().warning("Error saving enderchest on close for " + player.getName() + ": " + e.getMessage());
-            }
-        });
+        Team team = (Team)inventoryHolder;
+        Player player = (Player)event.getPlayer();
+        team.removeEnderChestViewer(player.getUniqueId());
+        if (this.plugin.getConfigManager().isDebugEnabled()) {
+            this.plugin.getLogger().info("Player " + player.getName() + " closed team enderchest for team " + team.getName() + " (remaining viewers: " + team.getEnderChestViewers().size() + ")");
+        }
+        if (!team.hasEnderChestViewers()) {
+            this.plugin.getTaskRunner().runAsync(() -> {
+                try {
+                    this.plugin.getTeamManager().saveAndReleaseEnderChest(team);
+                    if (this.plugin.getConfigManager().isDebugEnabled()) {
+                        this.plugin.getLogger().info("\u2713 Last viewer closed enderchest for team " + team.getName() + ", saved and released lock");
+                    }
+                } catch (Exception e) {
+                    this.plugin.getLogger().warning("Error saving enderchest on close for " + player.getName() + ": " + e.getMessage());
+                    e.printStackTrace();
+                }
+            });
+        }
     }
+
     private void handleInventoryChange(Team team, Player player, Inventory inventory, String changeType) {
-        plugin.getTaskRunner().runAsync(() -> {
+        this.plugin.getTaskRunner().runAsync(() -> {
             try {
-                plugin.getTeamManager().saveEnderChest(team);
+                this.plugin.getTeamManager().saveEnderChest(team);
                 if (team.hasEnderChestViewers()) {
-                    plugin.getTaskRunner().run(() -> {
-                        notifyOtherViewers(team, player, changeType);
-                    });
+                    this.plugin.getTaskRunner().run(() -> this.notifyOtherViewers(team, player, changeType));
                 }
             } catch (Exception e) {
-                plugin.getLogger().warning("Error handling enderchest change for " + player.getName() + ": " + e.getMessage());
+                this.plugin.getLogger().warning("Error handling enderchest change for " + player.getName() + ": " + e.getMessage());
             }
         });
     }
+
     private void notifyOtherViewers(Team team, Player changer, String changeType) {
         for (UUID viewerUuid : team.getEnderChestViewers()) {
-            if (viewerUuid.equals(changer.getUniqueId())) continue;
-            Player viewer = Bukkit.getPlayer(viewerUuid);
-            if (viewer != null && viewer.isOnline()) {
-                try {
-                    refreshViewerInventory(viewer, team);
-                } catch (Exception e) {
-                    plugin.getLogger().warning("Failed to refresh enderchest for viewer " + viewer.getName() + ": " + e.getMessage());
-                }
+            Player viewer;
+            if (viewerUuid.equals(changer.getUniqueId()) || (viewer = Bukkit.getPlayer((UUID)viewerUuid)) == null || !viewer.isOnline()) continue;
+            try {
+                this.refreshViewerInventory(viewer, team);
+            } catch (Exception e) {
+                this.plugin.getLogger().warning("Failed to refresh enderchest for viewer " + viewer.getName() + ": " + e.getMessage());
             }
         }
     }
+
     private void refreshViewerInventory(Player viewer, Team team) {
         if (viewer.getOpenInventory().getTopInventory().getHolder() instanceof Team) {
-            plugin.getTaskRunner().runOnEntity(viewer, () -> {
+            this.plugin.getTaskRunner().runOnEntity((Entity)viewer, () -> {
                 try {
                     viewer.closeInventory();
-                    plugin.getTaskRunner().runOnEntity(viewer, () -> {
-                        viewer.openInventory(team.getEnderChest());
-                    });
+                    this.plugin.getTaskRunner().runOnEntity((Entity)viewer, () -> viewer.openInventory(team.getEnderChest()));
                 } catch (Exception e) {
-                    plugin.getLogger().warning("Failed to refresh enderchest inventory for " + viewer.getName() + ": " + e.getMessage());
+                    this.plugin.getLogger().warning("Failed to refresh enderchest inventory for " + viewer.getName() + ": " + e.getMessage());
                 }
             });
         }
     }
 }
+

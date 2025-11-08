@@ -1,10 +1,19 @@
 package eu.kotori.justTeams.gui;
+
 import eu.kotori.justTeams.JustTeams;
+import eu.kotori.justTeams.gui.IRefreshableGUI;
 import eu.kotori.justTeams.team.Team;
 import eu.kotori.justTeams.team.TeamPlayer;
 import eu.kotori.justTeams.team.TeamRole;
 import eu.kotori.justTeams.util.GuiConfigManager;
 import eu.kotori.justTeams.util.ItemBuilder;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -13,20 +22,16 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
-import org.jetbrains.annotations.NotNull;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
-public class MemberEditGUI implements IRefreshableGUI, InventoryHolder {
+
+public class MemberEditGUI
+implements IRefreshableGUI,
+InventoryHolder {
     private final JustTeams plugin;
     private final Team team;
     private final Player viewer;
     private final UUID targetUuid;
     private final Inventory inventory;
+
     public MemberEditGUI(JustTeams plugin, Team team, Player viewer, UUID targetUuid) {
         this.plugin = plugin;
         this.team = team;
@@ -34,124 +39,132 @@ public class MemberEditGUI implements IRefreshableGUI, InventoryHolder {
         this.targetUuid = targetUuid;
         GuiConfigManager guiManager = plugin.getGuiConfigManager();
         ConfigurationSection guiConfig = guiManager.getGUI("member-edit-gui");
-        OfflinePlayer target = Bukkit.getOfflinePlayer(targetUuid);
-        String title = guiConfig.getString("title", "Edit: <player_name>")
-                .replace("<player_name>", target.getName() != null ? target.getName() : "Unknown");
+        OfflinePlayer target = Bukkit.getOfflinePlayer((UUID)targetUuid);
+        String title = guiConfig.getString("title", "Edit: <player_name>").replace("<player_name>", target.getName() != null ? target.getName() : "Unknown");
         int size = guiConfig.getInt("size", 54);
-        this.inventory = Bukkit.createInventory(this, size, plugin.getMiniMessage().deserialize(title));
-        initializeItems();
+        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize((Object)title));
+        this.initializeItems();
     }
+
     public void initializeItems() {
-        inventory.clear();
-        TeamPlayer targetMember = getTargetMember();
-        if (targetMember == null) return;
-        GuiConfigManager guiManager = plugin.getGuiConfigManager();
+        this.inventory.clear();
+        TeamPlayer targetMember = this.getTargetMember();
+        if (targetMember == null) {
+            return;
+        }
+        GuiConfigManager guiManager = this.plugin.getGuiConfigManager();
         ConfigurationSection guiConfig = guiManager.getGUI("member-edit-gui");
         ConfigurationSection itemsSection = guiConfig.getConfigurationSection("items");
-        if (itemsSection == null) return;
-        setItemFromConfig("player-info-head", itemsSection);
-        boolean isSelfView = targetUuid.equals(viewer.getUniqueId());
+        if (itemsSection == null) {
+            return;
+        }
+        this.setItemFromConfig("player-info-head", itemsSection);
+        boolean isSelfView = this.targetUuid.equals(this.viewer.getUniqueId());
         if (!isSelfView) {
             if (targetMember.getRole() == TeamRole.MEMBER) {
-                setItemFromConfig("promote-button", itemsSection);
+                this.setItemFromConfig("promote-button", itemsSection);
             } else if (targetMember.getRole() == TeamRole.CO_OWNER) {
-                setItemFromConfig("demote-button", itemsSection);
+                this.setItemFromConfig("demote-button", itemsSection);
             }
-            setItemFromConfig("kick-button", itemsSection);
-            if (team.isOwner(viewer.getUniqueId())) {
-                setItemFromConfig("transfer-button", itemsSection);
+            this.setItemFromConfig("kick-button", itemsSection);
+            if (this.team.isOwner(this.viewer.getUniqueId())) {
+                this.setItemFromConfig("transfer-button", itemsSection);
             }
         }
         if (isSelfView) {
-            setItemFromConfig("withdraw-permission-view", itemsSection);
-            setItemFromConfig("enderchest-permission-view", itemsSection);
-            setItemFromConfig("sethome-permission-view", itemsSection);
-            setItemFromConfig("usehome-permission-view", itemsSection);
+            this.setItemFromConfig("withdraw-permission-view", itemsSection);
+            this.setItemFromConfig("enderchest-permission-view", itemsSection);
+            this.setItemFromConfig("sethome-permission-view", itemsSection);
+            this.setItemFromConfig("usehome-permission-view", itemsSection);
         } else {
-            setItemFromConfig("withdraw-permission", itemsSection);
-            setItemFromConfig("enderchest-permission", itemsSection);
-            setItemFromConfig("sethome-permission", itemsSection);
-            setItemFromConfig("usehome-permission", itemsSection);
+            this.setItemFromConfig("withdraw-permission", itemsSection);
+            this.setItemFromConfig("enderchest-permission", itemsSection);
+            this.setItemFromConfig("sethome-permission", itemsSection);
+            this.setItemFromConfig("usehome-permission", itemsSection);
         }
-        setItemFromConfig("back-button", itemsSection);
+        this.setItemFromConfig("back-button", itemsSection);
         ConfigurationSection fillConfig = guiConfig.getConfigurationSection("fill-item");
         if (fillConfig != null) {
-            ItemStack fillItem = new ItemBuilder(Material.matchMaterial(fillConfig.getString("material", "GRAY_STAINED_GLASS_PANE")))
-                    .withName(fillConfig.getString("name", " "))
-                    .build();
-            for (int i = 0; i < inventory.getSize(); i++) {
-                if (inventory.getItem(i) == null) {
-                    inventory.setItem(i, fillItem);
-                }
+            ItemStack fillItem = new ItemBuilder(Material.matchMaterial((String)fillConfig.getString("material", "GRAY_STAINED_GLASS_PANE"))).withName(fillConfig.getString("name", " ")).build();
+            for (int i = 0; i < this.inventory.getSize(); ++i) {
+                if (this.inventory.getItem(i) != null) continue;
+                this.inventory.setItem(i, fillItem);
             }
         }
     }
+
     private void setItemFromConfig(String key, ConfigurationSection parentSection) {
         ConfigurationSection itemConfig = parentSection.getConfigurationSection(key);
-        if (itemConfig == null) return;
-        Material material = Material.matchMaterial(itemConfig.getString("material", "STONE"));
-        String name = replacePlaceholders(itemConfig.getString("name", ""));
-        List<String> lore = itemConfig.getStringList("lore").stream()
-                .map(this::replacePlaceholders)
-                .collect(Collectors.toList());
+        if (itemConfig == null) {
+            return;
+        }
+        Material material = Material.matchMaterial((String)itemConfig.getString("material", "STONE"));
+        String name = this.replacePlaceholders(itemConfig.getString("name", ""));
+        List<String> lore = itemConfig.getStringList("lore").stream().map(this::replacePlaceholders).collect(Collectors.toList());
         int slot = itemConfig.getInt("slot");
         ItemBuilder builder = new ItemBuilder(material).withName(name).withLore(lore).withAction(key);
         if (key.equals("player-info-head")) {
-            builder.asPlayerHead(targetUuid);
+            builder.asPlayerHead(this.targetUuid);
         }
-        inventory.setItem(slot, builder.build());
+        this.inventory.setItem(slot, builder.build());
     }
+
     private String replacePlaceholders(String text) {
-        TeamPlayer targetMember = getTargetMember();
-        if (targetMember == null) return text;
-        OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(targetUuid);
-        String joinDate = formatJoinDate(targetMember.getJoinDate());
-        return text
-                .replace("<player_name>", targetPlayer.getName() != null ? targetPlayer.getName() : "Unknown")
-                .replace("<role>", getRoleName(targetMember.getRole()))
-                .replace("<joindate>", joinDate)
-                .replace("<withdraw_status>", getStatus(targetMember.canWithdraw()))
-                .replace("<enderchest_status>", getStatus(targetMember.canUseEnderChest()))
-                .replace("<set_home_status>", getStatus(targetMember.canSetHome()))
-                .replace("<use_home_status>", getStatus(targetMember.canUseHome()));
+        TeamPlayer targetMember = this.getTargetMember();
+        if (targetMember == null) {
+            return text;
+        }
+        OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer((UUID)this.targetUuid);
+        String joinDate = this.formatJoinDate(targetMember.getJoinDate());
+        return text.replace("<player_name>", targetPlayer.getName() != null ? targetPlayer.getName() : "Unknown").replace("<role>", this.getRoleName(targetMember.getRole())).replace("<joindate>", joinDate).replace("<withdraw_status>", this.getStatus(targetMember.canWithdraw())).replace("<enderchest_status>", this.getStatus(targetMember.canUseEnderChest())).replace("<set_home_status>", this.getStatus(targetMember.canSetHome())).replace("<use_home_status>", this.getStatus(targetMember.canUseHome()));
     }
+
     private String getStatus(boolean hasPerm) {
         return hasPerm ? "<green>ENABLED" : "<red>DISABLED";
     }
+
     private String getRoleName(TeamRole role) {
-        return plugin.getGuiConfigManager().getRoleName(role.name());
+        return this.plugin.getGuiConfigManager().getRoleName(role.name());
     }
+
     private String formatJoinDate(Instant joinDate) {
         try {
             if (joinDate != null) {
-                String dateFormat = plugin.getGuiConfigManager().getPlaceholder("date_time.join_date_format", "dd MMM yyyy");
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern(dateFormat)
-                        .withZone(ZoneOffset.UTC);
+                String dateFormat = this.plugin.getGuiConfigManager().getPlaceholder("date_time.join_date_format", "dd MMM yyyy");
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern(dateFormat).withZone(ZoneOffset.UTC);
                 return formatter.format(joinDate);
-            } else {
-                return plugin.getGuiConfigManager().getPlaceholder("date_time.unknown_date", "Unknown");
             }
+            return this.plugin.getGuiConfigManager().getPlaceholder("date_time.unknown_date", "Unknown");
         } catch (Exception e) {
-            plugin.getLogger().warning("Error formatting join date: " + e.getMessage());
-            return plugin.getGuiConfigManager().getPlaceholder("date_time.unknown_date", "Unknown");
+            this.plugin.getLogger().warning("Error formatting join date: " + e.getMessage());
+            return this.plugin.getGuiConfigManager().getPlaceholder("date_time.unknown_date", "Unknown");
         }
     }
+
+    @Override
     public void open() {
-        viewer.openInventory(inventory);
+        this.viewer.openInventory(this.inventory);
     }
+
+    @Override
     public void refresh() {
-        open();
+        this.open();
     }
+
     public UUID getTargetUuid() {
-        return targetUuid;
+        return this.targetUuid;
     }
+
     public TeamPlayer getTargetMember() {
-        return team.getMember(targetUuid);
+        return this.team.getMember(this.targetUuid);
     }
+
     public Team getTeam() {
-        return team;
+        return this.team;
     }
+
     public Inventory getInventory() {
-        return inventory;
+        return this.inventory;
     }
 }
+

@@ -1,72 +1,91 @@
 package eu.kotori.justTeams.util;
+
 import eu.kotori.justTeams.JustTeams;
+import java.util.List;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Bukkit;
-import org.bukkit.command.CommandSender;
-import org.bukkit.plugin.PluginManager;
+import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.entity.Player;
+
 public class StartupMessage {
     public static void send() {
+        String engine;
         JustTeams plugin = JustTeams.getInstance();
-        MiniMessage mm = plugin.getMiniMessage();
-        CommandSender console = Bukkit.getConsoleSender();
-        PluginManager pm = Bukkit.getPluginManager();
-        String mainColor = plugin.getConfigManager().getMainColor();
-        String accentColor = plugin.getConfigManager().getAccentColor();
-        String version = plugin.getDescription().getVersion();
-        String author = plugin.getDescription().getAuthors().get(0);
-        String check = "<gradient:#00ff88:#00cc66><bold>✓</bold></gradient>";
-        String cross = "<gradient:#ff4444:#cc0000><bold>✗</bold></gradient>";
-        String warning = "<gradient:#ffaa00:#ff6600><bold>⚠</bold></gradient>";
-        String info = "<gradient:#4C9DDE:#4C96D2><bold>◆</bold></gradient>";
-        String star = "<gradient:#ffdd00:#ffaa00><bold>✦</bold></gradient>";
-        String diamond = "<gradient:#00ffff:#0088ff><bold>◆</bold></gradient>";
-        String crown = "<gradient:#ffd700:#ffaa00><bold>♔</bold></gradient>";
-        String sparkle = "<gradient:#ffffff:#ffdd00><bold>✨</bold></gradient>";
-        String pluginName = "ᴊᴜsᴛᴛᴇᴀᴍs";
-        TagResolver placeholders = TagResolver.resolver(
-                Placeholder.unparsed("version", version),
-                Placeholder.unparsed("author", author)
-        );
-        String line = "<dark_gray>────────────────────────────────────────────────────────────────────────────────";
-        String storageType = plugin.getConfig().getString("storage.type", "H2").toUpperCase();
-        boolean storageConnected = plugin.getStorageManager().isConnected();
-        boolean vaultEnabled = pm.isPluginEnabled("Vault");
-        boolean papiEnabled = pm.isPluginEnabled("PlaceholderAPI");
-        boolean pvpManagerEnabled = pm.isPluginEnabled("PvPManager");
-        String storageHook = "    <dark_gray>║ <white>Storage <gray>(" + storageType + "): " + (storageConnected ? check : cross) + " <gray>" + (storageConnected ? "Connected" : "Disconnected") + "\n";
-        String vaultHook = "    <dark_gray>║ <white>Vault: " + (vaultEnabled ? check : cross) + " <gray>" + (vaultEnabled ? "Economy Ready" : "Not Found") + "\n";
-        String papiHook = "    <dark_gray>║ <white>PlaceholderAPI: " + (papiEnabled ? check : cross) + " <gray>" + (papiEnabled ? "16 Placeholders" : "Not Found") + "\n";
-        String pvpManagerHook = "    <dark_gray>║ <white>PvPManager: " + (pvpManagerEnabled ? check : cross) + " <gray>" + (pvpManagerEnabled ? "PvP Control" : "Not Found") + "\n";
-        String serverName = Bukkit.getServer().getName();
-        String serverVersion = Bukkit.getVersion();
-        String javaVersion = System.getProperty("java.version");
-        String osName = System.getProperty("os.name");
-        String osArch = System.getProperty("os.arch");
-        long maxMemory = Runtime.getRuntime().maxMemory() / 1024 / 1024;
-        long totalMemory = Runtime.getRuntime().totalMemory() / 1024 / 1024;
-        long freeMemory = Runtime.getRuntime().freeMemory() / 1024 / 1024;
-        int cpuCores = Runtime.getRuntime().availableProcessors();
-        String javaVendor = System.getProperty("java.vendor");
-        String javaVersionShort = System.getProperty("java.version").split("\\.")[0];
-        String startupBlock =
-                line + "\n" +
-                        " \n" +
-                        "  <gradient:#4C9DDE:#4C96D2><bold>█╗  ██╗   <white>" + pluginName + " <gray>v<version></bold></gradient>\n" +
-                        "  <gradient:#4C9DDE:#4C96D2><bold>██║ ██╔╝   <gray>ʙʏ <white><author></bold></gradient>\n" +
-                        "  <gradient:#4C9DDE:#4C96D2><bold>█████╔╝    <white>sᴛᴀᴛᴜs: " + check + " <green>ʀᴇᴀᴅʏ</bold></gradient>\n" +
-                        "  <gradient:#4C9DDE:#4C96D2><bold>█╔═██╗    <white>ᴘʟᴀᴛғᴏʀᴍ: <#00DFFB>" + serverName + "</bold></gradient>\n" +
-                        "  <gradient:#4C9DDE:#4C96D2><bold>█║  ██╗    <white>ᴊᴀᴠᴀ: <#00DFFB>" + javaVendor + " " + javaVersionShort + "</bold></gradient>\n" +
-                        "  <gradient:#4C9DDE:#4C96D2><bold>█║  ╚═╝    <white>ᴍɪɴᴇᴄʀᴀғᴛ: <#00DFFB>" + serverVersion + "</bold></gradient>\n" +
-                        " \n" +
-                        "  " + info + " <white>System: <#00DFFB>" + osName + " <gray>(" + osArch + ")</gray>  <white>|</white>  <white>Memory: <#00DFFB>" + totalMemory + "MB/" + maxMemory + "MB</#00DFFB></white>  <white>|</white>  <white>CPU: <#00DFFB>" + cpuCores + "</#00DFFB></white>\n" +
-                        "  " + info + " <white>Storage: <#00DFFB>" + storageType + "</#00DFFB></white>  <white>|</white>  <white>Vault: " + (vaultEnabled ? check : cross) + "</white>  <white>|</white>  <white>PAPI: " + (papiEnabled ? check : cross) + "</white>  <white>|</white>  <white>PvPManager: " + (pvpManagerEnabled ? check : cross) + "</white>\n" +
-                        "  " + info + " <white>Commands: <#00DFFB>/team</#00DFFB></white>  <white>|</white>  <white><#00DFFB>/teammsg</#00DFFB></white>  <white>|</white>  <white><#00DFFB>/team help</#00DFFB></white>  <white>|</white>  <white>Max Teams: <#00DFFB>" + plugin.getConfig().getInt("team.max-members", 10) + "</#00DFFB></white>\n" +
-                        " \n" +
-                        "  <gradient:#00ff88:#00cc66><bold>✦ Plugin Successfully Loaded ✦</bold></gradient>\n" +
-                        " \n" +
-                        line;
-        console.sendMessage(mm.deserialize(startupBlock, placeholders));
+        ConsoleCommandSender console = Bukkit.getConsoleSender();
+        MiniMessage mm = MiniMessage.miniMessage();
+        String check = "<green>\u2714</green>";
+        String cross = "<red>\u2716</red>";
+        boolean redisEnabled = false;
+        try {
+            redisEnabled = plugin.getConfigManager() != null && plugin.getConfigManager().isRedisEnabled();
+        } catch (Exception exception) {
+            // empty catch block
+        }
+        boolean vaultEnabled = Bukkit.getPluginManager().isPluginEnabled("Vault");
+        boolean papiEnabled = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
+        boolean pvpManagerEnabled = Bukkit.getPluginManager().isPluginEnabled("PvPManager");
+        String redisStatus = redisEnabled ? check : "<gray>-</gray>";
+        String vaultStatus = vaultEnabled ? check : cross;
+        String papiStatus = papiEnabled ? check : cross;
+        String pvpManagerStatus = pvpManagerEnabled ? check : cross;
+        try {
+            Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
+            engine = "Folia";
+        } catch (ClassNotFoundException e) {
+            try {
+                Class.forName("com.destroystokyo.paper.PaperConfig");
+                engine = "Paper";
+            } catch (ClassNotFoundException e2) {
+                engine = "Spigot/Bukkit";
+            }
+        }
+        TagResolver placeholders = TagResolver.builder().resolver((TagResolver)Placeholder.unparsed((String)"version", (String)plugin.getDescription().getVersion())).resolver((TagResolver)Placeholder.unparsed((String)"author", (String)String.join((CharSequence)", ", plugin.getDescription().getAuthors()))).build();
+        String mainColor = "#4C9DDE";
+        String accentColor = "#7FCAE3";
+        String lineSeparator = "<dark_gray><strikethrough>                                                                                ";
+        console.sendMessage(mm.deserialize((Object)lineSeparator));
+        console.sendMessage((Component)Component.empty());
+        console.sendMessage(mm.deserialize("  <color:" + mainColor + ">\u2588\u2557  \u2588\u2588\u2557   <white>JustTeams <gray>v<version>", placeholders));
+        console.sendMessage(mm.deserialize("  <color:" + mainColor + ">\u2588\u2588\u2551 \u2588\u2588\u2554\u255d   <gray>\u0299\u028f <white><author>", placeholders));
+        console.sendMessage(mm.deserialize((Object)("  <color:" + mainColor + ">\u2588\u2588\u2588\u2588\u2588\u2554\u255d    <white>s\u1d1b\u1d00\u1d1b\u1d1cs: <color:#2ecc71>Active")));
+        console.sendMessage(mm.deserialize((Object)("  <color:" + accentColor + ">\u2588\u2554\u2550\u2588\u2588\u2557")));
+        console.sendMessage(mm.deserialize((Object)("  <color:" + accentColor + ">\u2588\u2551  \u2588\u2588\u2557   <white>\u0280\u1d07\u1d05\u026as \u1d04\u1d00\u1d04\u029c\u1d07: " + redisStatus + " <gray>(optional)")));
+        console.sendMessage(mm.deserialize((Object)("  <color:" + accentColor + ">\u2588\u2551  \u255a\u2550\u255d   <white>\u1d20\u1d00\u1d1c\u029f\u1d1b: " + vaultStatus + " <gray>(economy)")));
+        console.sendMessage((Component)Component.empty());
+        console.sendMessage(mm.deserialize((Object)("  <white>\u1d18\u1d00\u1d18\u026a: " + papiStatus + " <gray>| <white>\u1d18\u1d20\u1d18\u1d0d\u1d00\u0274\u1d00\u0262\u1d07\u0280: " + pvpManagerStatus + " <gray>| <white>\u1d07\u0274\u0262\u026a\u0274\u1d07: <gray>" + engine)));
+        console.sendMessage((Component)Component.empty());
+        console.sendMessage(mm.deserialize((Object)lineSeparator));
+    }
+
+    public static void sendUpdateNotification(JustTeams plugin) {
+        ConsoleCommandSender console = Bukkit.getConsoleSender();
+        MiniMessage mm = MiniMessage.miniMessage();
+        TagResolver placeholders = TagResolver.builder().resolver((TagResolver)Placeholder.unparsed((String)"current_version", (String)plugin.getDescription().getVersion())).resolver((TagResolver)Placeholder.unparsed((String)"latest_version", (String)plugin.latestVersion)).build();
+        String mainColor = "#f39c12";
+        String accentColor = "#e67e22";
+        String lineSeparator = "<dark_gray><strikethrough>                                                                                ";
+        List updateBlock = List.of((Object)("  <color:" + mainColor + ">\u2588\u2557  \u2588\u2588\u2557   <white>JustTeams <gray>Update"), (Object)("  <color:" + mainColor + ">\u2588\u2588\u2551 \u2588\u2588\u2554\u255d   <gray>A new version is available!"), (Object)("  <color:" + mainColor + ">\u2588\u2588\u2588\u2588\u2588\u2554\u255d"), (Object)("  <color:" + accentColor + ">\u2588\u2554\u2550\u2588\u2588\u2557    <white>\u1d04\u1d1c\u0280\u0280\u1d07\u0274\u1d1b: <gray><current_version>"), (Object)("  <color:" + accentColor + ">\u2588\u2551  \u2588\u2588\u2557   <white>\u029f\u1d00\u1d1b\u1d07s\u1d1b: <green><latest_version>"), (Object)("  <color:" + accentColor + ">\u2588\u2551  \u255a\u2550\u255d   <aqua><click:open_url:'https://builtbybit.com/resources/justteams.71401/'>Click here to download</click>"), (Object)"");
+        console.sendMessage(mm.deserialize((Object)lineSeparator));
+        console.sendMessage((Component)Component.empty());
+        for (String line : updateBlock) {
+            console.sendMessage(mm.deserialize(line, placeholders));
+        }
+        console.sendMessage(mm.deserialize((Object)lineSeparator));
+    }
+
+    public static void sendUpdateNotification(Player player, JustTeams plugin) {
+        MiniMessage mm = MiniMessage.miniMessage();
+        String link = "https://builtbybit.com/resources/justteams.71401/";
+        player.sendMessage(mm.deserialize((Object)"<gradient:#4C9DDE:#7FCAE3>--------------------------------------------------</gradient>"));
+        player.sendMessage((Component)Component.empty());
+        player.sendMessage(mm.deserialize((Object)"  <gradient:#4C9DDE:#7FCAE3>JustTeams</gradient> <gray>Update Available!</gray>"));
+        player.sendMessage(mm.deserialize((Object)("  <gray>A new version is available: <green>" + plugin.latestVersion + "</green>")));
+        player.sendMessage(mm.deserialize((Object)("  <click:open_url:'" + link + "'><hover:show_text:'<green>Click to visit download page!'><#7FCAE3><u>Click here to download the update.</u></hover></click>")));
+        player.sendMessage((Component)Component.empty());
+        player.sendMessage(mm.deserialize((Object)"<gradient:#7FCAE3:#4C9DDE>--------------------------------------------------</gradient>"));
     }
 }
+

@@ -18,7 +18,7 @@
 # ===================================================================
 
 # Configuration version - DO NOT MODIFY
-config-version: 20
+config-version: 21
 
 # ===================================================================
 #                         Proxy Configuration
@@ -45,10 +45,9 @@ storage:
 
   # MySQL/MariaDB Settings
   mysql:
-    enabled: false
     host: "localhost"
     port: 3306
-    database: "teams"
+    database: "username"
     username: "root"
     password: ""
     
@@ -56,8 +55,8 @@ storage:
     use_ssl: false
     allow_public_key_retrieval: true
     use_unicode: true
-    character_encoding: "utf8"
-    collation: "utf8_general_ci"
+    character_encoding: "utf8mb4"
+    collation: "utf8mb4_unicode_ci"
     
     # Connection timeouts (milliseconds)
     connection_timeout: 30000
@@ -66,24 +65,62 @@ storage:
     fail_over_read_only: false
     max_reconnects: 3
 
-  # Connection Pool Settings (Optimized for both H2 and MySQL)
+    # Connection Pool Settings (Optimized for both H2 and MySQL)
   connection_pool:
     # H2 defaults: max_size=4, min_idle=1
     # MySQL defaults: max_size=10, min_idle=3  
-    max_size: 8
-    min_idle: 2
+    max_size: 10
+    min_idle: 3
     
     # Timeouts in milliseconds
     idle_timeout: 300000          # 5 minutes
     max_lifetime: 1800000         # 30 minutes
-    connection_timeout: 15000     # 15 seconds (reduced from 20s)
-    validation_timeout: 3000      # 3 seconds
+    connection_timeout: 30000     # 30 seconds (match MySQL timeout)
+    validation_timeout: 5000      # 5 seconds
     
     # Connection testing
     connection_test_query: "SELECT 1"
     
     # Leak detection (0 = disabled, >0 = milliseconds before leak warning)
     leak_detection_threshold: 0
+
+# ===================================================================
+#                         Redis Configuration
+# ===================================================================
+#
+# Redis provides instant cross-server messaging (< 100ms latency).
+# When enabled, Redis handles real-time updates while MySQL stores data.
+# If Redis fails, the plugin automatically falls back to MySQL polling.
+#
+redis:
+  # Enable Redis for instant cross-server communication
+  # Set to 'false' to use only MySQL (1-second polling)
+  enabled: false
+  
+  # Redis server connection details
+  host: "localhost"
+  port: 6379
+  
+  # Authentication (leave empty if not required)
+  password: ""
+  
+  # SSL/TLS encryption for Redis connection
+  use_ssl: false
+  
+  # Connection timeout in milliseconds
+  # Lower values fail faster, higher values tolerate network delays
+  timeout: 5000
+  
+  # Connection pool settings
+  pool:
+    # Maximum total connections in pool
+    max_total: 20
+    
+    # Maximum idle connections to keep open
+    max_idle: 10
+    
+    # Minimum idle connections to maintain
+    min_idle: 2
 
 # ===================================================================
 #                        Feature Configuration
@@ -101,6 +138,7 @@ features:
   team_blacklist: true
   team_transfer: true
   team_public_toggle: true
+  team_rename: true
   
   # Member Management
   member_kick: true
@@ -140,6 +178,9 @@ features:
   # Communication Features
   team_chat: true
   team_message_command: true
+  
+  # Cross-Server Display
+  show_cross_server_status: true
 
 # ===================================================================
 #                          General Settings
@@ -152,7 +193,16 @@ settings:
   debug: false
   
   # Server Configuration
+  # single_server_mode: Set to true if you have only ONE server
+  #   - Disables cross-server features for better performance
+  #   - Use with H2 database for standalone servers
+  # Set to false for multi-server networks with MySQL
   single_server_mode: true
+  
+  # server-identifier: Unique name for this server in your network
+  #   - Must be different for each server (e.g., "survival", "creative", "lobby")
+  #   - Only used when single_server_mode is false
+  #   - Used to track which server players are on
   server-identifier: "survival"
   
   # Theme Colors
@@ -167,24 +217,45 @@ settings:
   max_tag_length: 6
   max_description_length: 64
   
+  # Team Rename Cooldown
+  # Time in seconds before a team can be renamed again
+  # Set to 0 to disable cooldown (allows immediate renaming)
+  # Recommended: 86400 (24 hours), 604800 (7 days), or 2592000 (30 days)
+  rename_cooldown: 604800  # 7 days (default)
+  
   # Default Settings
   default_pvp_status: true
   default_public_status: false
   
   # Cross-Server Synchronization
+  # IMPORTANT: Enable this for multi-server networks!
+  # Requirements:
+  #   1. Set single_server_mode to false
+  #   2. Use MySQL database (storage.type: "mysql")
+  #   3. Configure proxy_settings.type (BUNGEE or VELOCITY)
+  #   4. Set unique server-identifier on each server
+  #   5. All servers must connect to the SAME MySQL database
+  # When enabled:
+  #   - Teams are synchronized across all servers
+  #   - Players can switch servers and stay in their team
+  #   - Team data updates in real-time across the network
   enable_cross_server_sync: false
   
   # Performance Optimization
+  # Sync intervals control how often cross-server data is synchronized
+  # ULTRA-FAST MODE: critical_sync_interval set to 1 second for near-instant delivery
+  # For high-traffic servers (100+ players): increase to 2-3 seconds
+  # For normal servers: 1 second provides the best real-time experience
   sync_optimization:
-    heartbeat_interval: 600
-    cross_server_sync_interval: 300
-    critical_sync_interval: 180
+    heartbeat_interval: 600            # Server heartbeat: 10 minutes (600 seconds)
+    cross_server_sync_interval: 3    
+    critical_sync_interval: 1          # Messages & critical updates: 1 SECOND (ULTRA-FAST)
     max_teams_per_batch: 100
     enable_lazy_loading: true
     team_cache_ttl: 1200
     enable_optimistic_locking: true
     max_sync_retries: 2
-    sync_retry_delay: 3000
+    sync_retry_delay: 1000             # Reduced retry delay to 1 second
     max_batch_size: 500
     cache_cleanup_interval: 900
     async_database_operations: true
@@ -220,11 +291,14 @@ broadcasts:
 # ===================================================================
 #
 # Configure the team chat system.
+# When character_enabled is true, players can prefix messages with the character to send team chat
+# Set character to a symbol like "#" or "!" 
+# IMPORTANT: Never leave character empty ("") as it will capture ALL messages!
 #
 team_chat:
   character_enabled: true
-  character: ""
-  require_space: false
+  character: "#"  # Use # prefix for team chat (e.g., "#hello team")
+  require_space: false  # If true, requires space after character (e.g., "# hello team")
 
 # ===================================================================
 #                        Home Configuration
@@ -264,8 +338,79 @@ team_bank:
 # Configure the shared team ender chest.
 #
 team_enderchest:
-  enabled: true
+  enabled: false
   rows: 3
+
+# ===================================================================
+#                    World Restrictions Configuration
+# ===================================================================
+#
+# Configure per-world feature restrictions.
+# Features can be disabled in specific worlds.
+#
+world_restrictions:
+  enabled: true
+  
+  # List of worlds where specific features are disabled
+  disabled_worlds:
+    enderchest:
+      - "world_nether"
+      - "world_the_end"
+    sethome:
+      - "pvp_world"
+      - "event_world"
+    home:
+      - "pvp_world"
+      - "event_world"
+    warp:
+      - "pvp_world"
+    bank:
+      - "creative_world"
+
+# ===================================================================
+#                      Feature Costs Configuration
+# ===================================================================
+#
+# Configure costs for using team features.
+# Supports both Vault economy and item-based costs.
+#
+feature_costs:
+  enabled: true
+  
+  # Economy costs (requires Vault)
+  economy:
+    enabled: true
+    
+    # Cost for each feature usage
+    sethome: 100.0
+    home: 50.0
+    enderchest: 25.0
+    setwarp: 200.0
+    warp: 75.0
+    bank_deposit: 0.0
+    bank_withdraw: 10.0
+    rename: 500.0
+  
+  # Item costs
+  items:
+    enabled: false
+    
+    # Item costs for each feature (format: "MATERIAL:AMOUNT")
+    sethome:
+      - "DIAMOND:2"
+      - "EMERALD:1"
+    home:
+      - "ENDER_PEARL:1"
+    enderchest:
+      - "ENDER_CHEST:1"
+    setwarp:
+      - "DIAMOND:5"
+      - "GOLD_INGOT:10"
+    warp:
+      - "GOLD_INGOT:2"
+    
+    # Whether to consume items on use (true) or just require them in inventory (false)
+    consume_on_use: true
 
 # ===================================================================
 #                        Effects Configuration
@@ -312,13 +457,3 @@ bedrock_support:
   full_feature_support: true
   cross_platform_teams: true
   uuid_mode: "auto"
-
-# ===================================================================
-#                       Webhook Configuration
-# ===================================================================
-#
-# Developement.. You can disable it anytime
-#
-webhook:
-  enabled: true
-  server-name: "ServerName"

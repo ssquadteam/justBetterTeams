@@ -1,36 +1,44 @@
 package eu.kotori.justTeams.config;
+
 import eu.kotori.justTeams.JustTeams;
+import java.io.File;
+import java.io.IOException;
+import java.util.logging.Level;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
-import java.io.File;
-import java.io.IOException;
+
 public class MessageConfig {
     private final JustTeams plugin;
     private File customConfigFile;
     private FileConfiguration customConfig;
+
     public MessageConfig(JustTeams plugin) {
         this.plugin = plugin;
-        createCustomConfig();
+        this.createCustomConfig();
     }
+
     public FileConfiguration getCustomConfig() {
         return this.customConfig;
     }
+
     public void reload() {
-        customConfigFile = new File(plugin.getDataFolder(), "messages.yml");
-        customConfig = YamlConfiguration.loadConfiguration(customConfigFile);
+        this.customConfigFile = new File(this.plugin.getDataFolder(), "messages.yml");
+        this.customConfig = YamlConfiguration.loadConfiguration((File)this.customConfigFile);
     }
+
     private void createCustomConfig() {
-        customConfigFile = new File(plugin.getDataFolder(), "messages.yml");
-        if (!customConfigFile.exists()) {
-            customConfigFile.getParentFile().mkdirs();
-            plugin.saveResource("messages.yml", false);
+        this.customConfigFile = new File(this.plugin.getDataFolder(), "messages.yml");
+        if (!this.customConfigFile.exists()) {
+            this.customConfigFile.getParentFile().mkdirs();
+            this.plugin.saveResource("messages.yml", false);
         }
-        customConfig = new YamlConfiguration();
+        this.customConfig = new YamlConfiguration();
         try {
-            customConfig.load(customConfigFile);
+            this.customConfig.load(this.customConfigFile);
         } catch (IOException | InvalidConfigurationException e) {
-            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Message config load error details", e);
+            this.plugin.getLogger().log(Level.SEVERE, "Message config load error details", e);
         }
     }
 }
+

@@ -1,8 +1,11 @@
 package eu.kotori.justTeams.team;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
+
+import eu.kotori.justTeams.team.TeamRole;
 import java.time.Instant;
 import java.util.UUID;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+
 public class TeamPlayer {
     private final UUID playerUuid;
     private volatile TeamRole role;
@@ -16,6 +19,7 @@ public class TeamPlayer {
     private volatile boolean canKickMembers;
     private volatile boolean canPromoteMembers;
     private volatile boolean canDemoteMembers;
+
     public TeamPlayer(UUID playerUuid, TeamRole role, Instant joinDate, boolean canWithdraw, boolean canUseEnderChest, boolean canSetHome, boolean canUseHome) {
         this.playerUuid = playerUuid;
         this.role = role;
@@ -24,10 +28,10 @@ public class TeamPlayer {
         this.canUseEnderChest = canUseEnderChest;
         this.canSetHome = canSetHome;
         this.canUseHome = canUseHome;
-        setDefaultEditingPermissions();
+        this.setDefaultEditingPermissions();
     }
-    public TeamPlayer(UUID playerUuid, TeamRole role, Instant joinDate, boolean canWithdraw, boolean canUseEnderChest, boolean canSetHome, boolean canUseHome,
-                     boolean canEditMembers, boolean canEditCoOwners, boolean canKickMembers, boolean canPromoteMembers, boolean canDemoteMembers) {
+
+    public TeamPlayer(UUID playerUuid, TeamRole role, Instant joinDate, boolean canWithdraw, boolean canUseEnderChest, boolean canSetHome, boolean canUseHome, boolean canEditMembers, boolean canEditCoOwners, boolean canKickMembers, boolean canPromoteMembers, boolean canDemoteMembers) {
         this.playerUuid = playerUuid;
         this.role = role;
         this.joinDate = joinDate;
@@ -41,100 +45,128 @@ public class TeamPlayer {
         this.canPromoteMembers = canPromoteMembers;
         this.canDemoteMembers = canDemoteMembers;
     }
+
     private void setDefaultEditingPermissions() {
-        switch (role) {
-            case OWNER:
+        switch (this.role) {
+            case OWNER: {
                 this.canEditMembers = true;
                 this.canEditCoOwners = true;
                 this.canKickMembers = true;
                 this.canPromoteMembers = true;
                 this.canDemoteMembers = true;
                 break;
-            case CO_OWNER:
+            }
+            case CO_OWNER: {
                 this.canEditMembers = true;
                 this.canEditCoOwners = false;
                 this.canKickMembers = true;
                 this.canPromoteMembers = false;
                 this.canDemoteMembers = false;
                 break;
-            case MEMBER:
+            }
+            case MEMBER: {
                 this.canEditMembers = false;
                 this.canEditCoOwners = false;
                 this.canKickMembers = false;
                 this.canPromoteMembers = false;
                 this.canDemoteMembers = false;
-                break;
+            }
         }
     }
+
     public UUID getPlayerUuid() {
-        return playerUuid;
+        return this.playerUuid;
     }
+
     public TeamRole getRole() {
-        return role;
+        return this.role;
     }
+
     public Instant getJoinDate() {
-        return joinDate;
+        return this.joinDate;
     }
+
     public void setRole(TeamRole role) {
         this.role = role;
-        setDefaultEditingPermissions();
+        this.setDefaultEditingPermissions();
     }
+
     public boolean canWithdraw() {
-        return canWithdraw;
+        return this.canWithdraw;
     }
+
     public void setCanWithdraw(boolean canWithdraw) {
         this.canWithdraw = canWithdraw;
     }
+
     public boolean canUseEnderChest() {
-        return canUseEnderChest;
+        return this.canUseEnderChest;
     }
+
     public void setCanUseEnderChest(boolean canUseEnderChest) {
         this.canUseEnderChest = canUseEnderChest;
     }
+
     public boolean canSetHome() {
-        return canSetHome;
+        return this.canSetHome;
     }
+
     public void setCanSetHome(boolean canSetHome) {
         this.canSetHome = canSetHome;
     }
+
     public boolean canUseHome() {
-        return canUseHome;
+        return this.canUseHome;
     }
+
     public void setCanUseHome(boolean canUseHome) {
         this.canUseHome = canUseHome;
     }
+
     public boolean canEditMembers() {
-        return canEditMembers;
+        return this.canEditMembers;
     }
+
     public void setCanEditMembers(boolean canEditMembers) {
         this.canEditMembers = canEditMembers;
     }
+
     public boolean canEditCoOwners() {
-        return canEditCoOwners;
+        return this.canEditCoOwners;
     }
+
     public void setCanEditCoOwners(boolean canEditCoOwners) {
         this.canEditCoOwners = canEditCoOwners;
     }
+
     public boolean canKickMembers() {
-        return canKickMembers;
+        return this.canKickMembers;
     }
+
     public void setCanKickMembers(boolean canKickMembers) {
         this.canKickMembers = canKickMembers;
     }
+
     public boolean canPromoteMembers() {
-        return canPromoteMembers;
+        return this.canPromoteMembers;
     }
+
     public void setCanPromoteMembers(boolean canPromoteMembers) {
         this.canPromoteMembers = canPromoteMembers;
     }
+
     public boolean canDemoteMembers() {
-        return canDemoteMembers;
+        return this.canDemoteMembers;
     }
+
     public void setCanDemoteMembers(boolean canDemoteMembers) {
         this.canDemoteMembers = canDemoteMembers;
     }
+
     public boolean canEditPlayer(TeamPlayer target) {
-        if (target == null) return false;
+        if (target == null) {
+            return false;
+        }
         if (this.playerUuid.equals(target.getPlayerUuid())) {
             return false;
         }
@@ -144,29 +176,34 @@ public class TeamPlayer {
         if (this.role == TeamRole.CO_OWNER) {
             if (target.getRole() == TeamRole.MEMBER) {
                 return this.canEditMembers;
-            } else if (target.getRole() == TeamRole.CO_OWNER) {
+            }
+            if (target.getRole() == TeamRole.CO_OWNER) {
                 return this.canEditCoOwners;
             }
         }
         return false;
     }
+
     public boolean canKickPlayer(TeamPlayer target) {
-        if (target == null) return false;
+        if (target == null) {
+            return false;
+        }
         if (this.playerUuid.equals(target.getPlayerUuid())) {
             return false;
         }
         if (this.role == TeamRole.OWNER) {
             return true;
         }
-        if (this.role == TeamRole.CO_OWNER) {
-            if (target.getRole() == TeamRole.MEMBER) {
-                return this.canKickMembers;
-            }
+        if (this.role == TeamRole.CO_OWNER && target.getRole() == TeamRole.MEMBER) {
+            return this.canKickMembers;
         }
         return false;
     }
+
     public boolean canPromotePlayer(TeamPlayer target) {
-        if (target == null) return false;
+        if (target == null) {
+            return false;
+        }
         if (this.playerUuid.equals(target.getPlayerUuid())) {
             return false;
         }
@@ -175,8 +212,11 @@ public class TeamPlayer {
         }
         return false;
     }
+
     public boolean canDemotePlayer(TeamPlayer target) {
-        if (target == null) return false;
+        if (target == null) {
+            return false;
+        }
         if (this.playerUuid.equals(target.getPlayerUuid())) {
             return false;
         }
@@ -185,11 +225,14 @@ public class TeamPlayer {
         }
         return false;
     }
+
     public Player getBukkitPlayer() {
-        return Bukkit.getPlayer(playerUuid);
+        return Bukkit.getPlayer((UUID)this.playerUuid);
     }
+
     public boolean isOnline() {
-        Player player = getBukkitPlayer();
+        Player player = this.getBukkitPlayer();
         return player != null && player.isOnline();
     }
 }
+

@@ -1,4 +1,4 @@
-placeholders-version: 4
+placeholders-version: 5
 
 # JustTeams Placeholder Configuration
 # Placeholder configuration for JustTeams
@@ -143,6 +143,29 @@ numbers:
   percentage_format: "#.##%"
 
 # =============================================================================
+# PLATFORM INDICATORS CONFIGURATION
+# =============================================================================
+platform:
+  # Java Edition indicator
+  java:
+    enabled: true
+    color: "#00FF00"
+    icon: "[JE]"
+    format: " <#00FF00>[JE]</#00FF00>"
+  
+  # Bedrock Edition indicator
+  bedrock:
+    enabled: true
+    color: "#00D4FF"
+    icon: "[BE]"
+    format: " <#00D4FF>[BE]</#00D4FF>"
+  
+  # Show platform indicators in GUIs and chat
+  show_in_gui: true
+  show_in_chat: true
+  show_gamertags: true
+
+# =============================================================================
 # PLAYER ROLES CONFIGURATION
 # =============================================================================
 roles:
@@ -269,3 +292,22 @@ warps:
   password_protected_label: "🔒 Password Protected"
   private_label: "🔒 Private"
   public_label: "🌐 Public"
+
+# =============================================================================
+# FEATURE COSTS & RESTRICTIONS CONFIGURATION
+# =============================================================================
+restrictions:
+  # Feature cost display
+  economy_cost_format: "<gold>$<cost></gold>"
+  items_cost_format: "<yellow><count>x <item></yellow>"
+  feature_disabled_icon: "🚫 "
+  feature_enabled_icon: "✅ "
+  
+  # World restriction display
+  disabled_worlds_format: "<red>Disabled in: <worlds></red>"
+  enabled_worlds_format: "<green>Available in: <worlds></green>"
+  
+  # Cost breakdown display
+  cost_breakdown_header: "<gold>Cost Breakdown:</gold>"
+  no_cost_label: "<green>Free</green>"
+  total_cost_format: "<gold>Total: <cost></gold>"

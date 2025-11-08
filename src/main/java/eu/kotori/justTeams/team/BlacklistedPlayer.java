@@ -1,6 +1,8 @@
 package eu.kotori.justTeams.team;
+
 import java.time.Instant;
 import java.util.UUID;
+
 public class BlacklistedPlayer {
     private final UUID playerUuid;
     private final String playerName;
@@ -8,8 +10,8 @@ public class BlacklistedPlayer {
     private final UUID blacklistedByUuid;
     private final String blacklistedByName;
     private final Instant blacklistedAt;
-    public BlacklistedPlayer(UUID playerUuid, String playerName, String reason,
-                           UUID blacklistedByUuid, String blacklistedByName, Instant blacklistedAt) {
+
+    public BlacklistedPlayer(UUID playerUuid, String playerName, String reason, UUID blacklistedByUuid, String blacklistedByName, Instant blacklistedAt) {
         this.playerUuid = playerUuid;
         this.playerName = playerName;
         this.reason = reason;
@@ -17,22 +19,29 @@ public class BlacklistedPlayer {
         this.blacklistedByName = blacklistedByName;
         this.blacklistedAt = blacklistedAt;
     }
+
     public UUID getPlayerUuid() {
-        return playerUuid;
+        return this.playerUuid;
     }
+
     public String getPlayerName() {
-        return playerName;
+        return this.playerName;
     }
+
     public String getReason() {
-        return reason;
+        return this.reason;
     }
+
     public UUID getBlacklistedByUuid() {
-        return blacklistedByUuid;
+        return this.blacklistedByUuid;
     }
+
     public String getBlacklistedByName() {
-        return blacklistedByName;
+        return this.blacklistedByName;
     }
+
     public Instant getBlacklistedAt() {
-        return blacklistedAt;
+        return this.blacklistedAt;
     }
 }
+

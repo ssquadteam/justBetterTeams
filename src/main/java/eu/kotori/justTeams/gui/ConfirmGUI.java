@@ -1,7 +1,10 @@
 package eu.kotori.justTeams.gui;
+
 import eu.kotori.justTeams.JustTeams;
 import eu.kotori.justTeams.util.GuiConfigManager;
 import eu.kotori.justTeams.util.ItemBuilder;
+import java.util.List;
+import java.util.function.Consumer;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -10,14 +13,14 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
-import org.jetbrains.annotations.NotNull;
-import java.util.List;
-import java.util.function.Consumer;
-public class ConfirmGUI implements InventoryHolder {
+
+public class ConfirmGUI
+implements InventoryHolder {
     private final JustTeams plugin;
     private final Player viewer;
     private final Inventory inventory;
     private final Consumer<Boolean> callback;
+
     public ConfirmGUI(JustTeams plugin, Player viewer, String title, Consumer<Boolean> callback) {
         this.plugin = plugin;
         this.viewer = viewer;
@@ -25,48 +28,56 @@ public class ConfirmGUI implements InventoryHolder {
         GuiConfigManager guiManager = plugin.getGuiConfigManager();
         ConfigurationSection guiConfig = guiManager.getGUI("confirm-gui");
         int size = guiConfig.getInt("size", 27);
-        this.inventory = Bukkit.createInventory(this, size, Component.text(title));
-        initializeItems(guiConfig);
+        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)Component.text((String)title));
+        this.initializeItems(guiConfig);
     }
+
     private void initializeItems(ConfigurationSection guiConfig) {
-        inventory.clear();
+        this.inventory.clear();
         ConfigurationSection itemsSection = guiConfig.getConfigurationSection("items");
-        if (itemsSection == null) return;
-        setItemFromConfig(itemsSection, "confirm");
-        setItemFromConfig(itemsSection, "cancel");
+        if (itemsSection == null) {
+            return;
+        }
+        this.setItemFromConfig(itemsSection, "confirm");
+        this.setItemFromConfig(itemsSection, "cancel");
         ConfigurationSection fillConfig = guiConfig.getConfigurationSection("fill-item");
         if (fillConfig != null) {
-            ItemStack fillItem = new ItemBuilder(Material.matchMaterial(fillConfig.getString("material", "GRAY_STAINED_GLASS_PANE")))
-                    .withName(fillConfig.getString("name", " "))
-                    .build();
-            for (int i = 0; i < inventory.getSize(); i++) {
-                if (inventory.getItem(i) == null) {
-                    inventory.setItem(i, fillItem);
-                }
+            ItemStack fillItem = new ItemBuilder(Material.matchMaterial((String)fillConfig.getString("material", "GRAY_STAINED_GLASS_PANE"))).withName(fillConfig.getString("name", " ")).build();
+            for (int i = 0; i < this.inventory.getSize(); ++i) {
+                if (this.inventory.getItem(i) != null) continue;
+                this.inventory.setItem(i, fillItem);
             }
         }
     }
+
     private void setItemFromConfig(ConfigurationSection itemsSection, String key) {
         ConfigurationSection itemConfig = itemsSection.getConfigurationSection(key);
-        if (itemConfig == null) return;
+        if (itemConfig == null) {
+            return;
+        }
         int slot = itemConfig.getInt("slot");
-        Material material = Material.matchMaterial(itemConfig.getString("material", "STONE"));
+        Material material = Material.matchMaterial((String)itemConfig.getString("material", "STONE"));
         String name = itemConfig.getString("name", "");
-        List<String> lore = itemConfig.getStringList("lore");
-        inventory.setItem(slot, new ItemBuilder(material).withName(name).withLore(lore).withAction(key).build());
+        List lore = itemConfig.getStringList("lore");
+        this.inventory.setItem(slot, new ItemBuilder(material).withName(name).withLore(lore).withAction(key).build());
     }
+
     public void open() {
-        viewer.openInventory(inventory);
+        this.viewer.openInventory(this.inventory);
     }
+
     public void handleConfirm() {
-        viewer.closeInventory();
-        callback.accept(true);
+        this.viewer.closeInventory();
+        this.callback.accept(true);
     }
+
     public void handleCancel() {
-        viewer.closeInventory();
-        callback.accept(false);
+        this.viewer.closeInventory();
+        this.callback.accept(false);
     }
+
     public Inventory getInventory() {
-        return inventory;
+        return this.inventory;
     }
 }
+

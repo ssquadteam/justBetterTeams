@@ -42,6 +42,9 @@ dependencies {
     api libs.com.mysql.mysql.connector.j
     api libs.com.h2database.h2
     api libs.org.slf4j.slf4j.nop
+    api libs.redis.clients.jedis
+    api libs.org.apache.commons.commons.pool2
+
     compileOnly libs.io.papermc.paper.paper.api
     compileOnly libs.com.github.milkbowl.vaultapi
     compileOnly libs.me.clip.placeholderapi
@@ -83,6 +86,8 @@ tasks.shadowJar {
 
     relocate 'com.zaxxer.hikari', 'eu.kotori.justTeams.libs.hikari'
     relocate 'org.h2', 'eu.kotori.justTeams.libs.h2'
+    relocate 'redis.clients', 'eu.kotori.justTeams.libs.jedis'
+    relocate 'org.apache.commons.pool2', 'eu.kotori.justTeams.libs.pool2'
 
     exclude 'META-INF/services/java.sql.Driver'
 }

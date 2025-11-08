@@ -10,6 +10,8 @@ io-papermc-paper-paper-api = "1.21-R0.1-SNAPSHOT"
 me-clip-placeholderapi = "2.11.6"
 me-nochance-pvpmanager-pvpmanager = "3.18.44"
 org-slf4j-slf4j-nop = "2.0.13"
+redis-clients-jedis = "5.1.0"
+org-apache-commons-commons-pool2 = "2.12.0"
 
 [libraries]
 com-github-milkbowl-vaultapi = { module = "com.github.MilkBowl:VaultAPI", version.ref = "com-github-milkbowl-vaultapi" }
@@ -20,3 +22,5 @@ io-papermc-paper-paper-api = { module = "io.papermc.paper:paper-api", version.re
 me-clip-placeholderapi = { module = "me.clip:placeholderapi", version.ref = "me-clip-placeholderapi" }
 me-nochance-pvpmanager-pvpmanager = { module = "me.NoChance.PvPManager:pvpmanager", version.ref = "me-nochance-pvpmanager-pvpmanager" }
 org-slf4j-slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "org-slf4j-slf4j-nop" }
+redis-clients-jedis = { module = "redis.clients:jedis", version.ref = "redis-clients-jedis" }
+org-apache-commons-commons-pool2 = { module = "org.apache.commons:commons-pool2", version.ref = "org-apache-commons-commons-pool2" }

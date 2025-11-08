@@ -3,13 +3,12 @@ package eu.kotori.justTeams.util;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import eu.kotori.justTeams.JustTeams;
-import eu.kotori.justTeams.team.Team;
 import eu.kotori.justTeams.team.BlacklistedPlayer;
 import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 public class CacheManager {
     private final JustTeams plugin;
@@ -17,113 +16,90 @@ public class CacheManager {
     private final Cache<Integer, List<UUID>> joinRequestCache;
     private final Cache<String, Boolean> permissionCache;
     private final Cache<UUID, String> playerNameCache;
-    private final Map<Integer, Long> lastDatabaseSync = new ConcurrentHashMap<>();
+    private final Map<Integer, Long> lastDatabaseSync = new ConcurrentHashMap<Integer, Long>();
     private final long cacheExpiry;
     private final long syncCooldown;
 
     public CacheManager(JustTeams plugin) {
         this.plugin = plugin;
-        this.cacheExpiry = plugin.getConfig().getLong("settings.sync_optimization.team_cache_ttl", 900);
-        this.syncCooldown = plugin.getConfig().getLong("settings.sync_optimization.cache_cleanup_interval", 600) * 1000;
-
-        this.blacklistCache = CacheBuilder.newBuilder()
-                .maximumSize(1000)
-                .expireAfterWrite(cacheExpiry, TimeUnit.SECONDS)
-                .build();
-
-        this.joinRequestCache = CacheBuilder.newBuilder()
-                .maximumSize(1000)
-                .expireAfterWrite(cacheExpiry, TimeUnit.SECONDS)
-                .build();
-
-        this.permissionCache = CacheBuilder.newBuilder()
-                .maximumSize(5000)
-                .expireAfterWrite(cacheExpiry, TimeUnit.SECONDS)
-                .build();
-
-        this.playerNameCache = CacheBuilder.newBuilder()
-                .maximumSize(10000)
-                .expireAfterWrite(1800, TimeUnit.SECONDS)
-                .build();
+        this.cacheExpiry = plugin.getConfig().getLong("settings.sync_optimization.team_cache_ttl", 900L);
+        this.syncCooldown = plugin.getConfig().getLong("settings.sync_optimization.cache_cleanup_interval", 600L) * 1000L;
+        this.blacklistCache = CacheBuilder.newBuilder().maximumSize(1000L).expireAfterWrite(this.cacheExpiry, TimeUnit.SECONDS).build();
+        this.joinRequestCache = CacheBuilder.newBuilder().maximumSize(1000L).expireAfterWrite(this.cacheExpiry, TimeUnit.SECONDS).build();
+        this.permissionCache = CacheBuilder.newBuilder().maximumSize(5000L).expireAfterWrite(this.cacheExpiry, TimeUnit.SECONDS).build();
+        this.playerNameCache = CacheBuilder.newBuilder().maximumSize(10000L).expireAfterWrite(1800L, TimeUnit.SECONDS).build();
     }
 
     public List<BlacklistedPlayer> getTeamBlacklist(int teamId) {
-        return blacklistCache.getIfPresent(teamId);
+        return this.blacklistCache.getIfPresent(teamId);
     }
 
     public void cacheTeamBlacklist(int teamId, List<BlacklistedPlayer> blacklist) {
-        blacklistCache.put(teamId, blacklist);
-        lastDatabaseSync.put(teamId, System.currentTimeMillis());
+        this.blacklistCache.put(teamId, blacklist);
+        this.lastDatabaseSync.put(teamId, System.currentTimeMillis());
     }
 
     public void invalidateTeamBlacklist(int teamId) {
-        blacklistCache.invalidate(teamId);
-        lastDatabaseSync.remove(teamId);
+        this.blacklistCache.invalidate(teamId);
+        this.lastDatabaseSync.remove(teamId);
     }
 
     public List<UUID> getJoinRequests(int teamId) {
-        return joinRequestCache.getIfPresent(teamId);
+        return this.joinRequestCache.getIfPresent(teamId);
     }
 
     public void cacheJoinRequests(int teamId, List<UUID> requests) {
-        joinRequestCache.put(teamId, requests);
+        this.joinRequestCache.put(teamId, requests);
     }
 
     public void invalidateJoinRequests(int teamId) {
-        joinRequestCache.invalidate(teamId);
+        this.joinRequestCache.invalidate(teamId);
     }
 
     public Boolean getPermissionResult(String key) {
-        return permissionCache.getIfPresent(key);
+        return this.permissionCache.getIfPresent(key);
     }
 
     public void cachePermissionResult(String key, boolean result) {
-        permissionCache.put(key, result);
+        this.permissionCache.put(key, result);
     }
 
     public String getPlayerName(UUID playerUuid) {
-        return playerNameCache.getIfPresent(playerUuid);
+        return this.playerNameCache.getIfPresent(playerUuid);
     }
 
     public void cachePlayerName(UUID playerUuid, String name) {
-        playerNameCache.put(playerUuid, name);
+        this.playerNameCache.put(playerUuid, name);
     }
 
     public boolean needsDatabaseSync(int teamId) {
-        Long lastSync = lastDatabaseSync.get(teamId);
-        return lastSync == null || (System.currentTimeMillis() - lastSync) > syncCooldown;
+        Long lastSync = this.lastDatabaseSync.get(teamId);
+        return lastSync == null || System.currentTimeMillis() - lastSync > this.syncCooldown;
     }
 
     public void markSynced(int teamId) {
-        lastDatabaseSync.put(teamId, System.currentTimeMillis());
+        this.lastDatabaseSync.put(teamId, System.currentTimeMillis());
     }
 
     public void cleanup() {
-        blacklistCache.cleanUp();
-        joinRequestCache.cleanUp();
-        permissionCache.cleanUp();
-        playerNameCache.cleanUp();
-
-        long cutoff = System.currentTimeMillis() - (syncCooldown * 2);
-        lastDatabaseSync.entrySet().removeIf(entry -> entry.getValue() < cutoff);
+        this.blacklistCache.cleanUp();
+        this.joinRequestCache.cleanUp();
+        this.permissionCache.cleanUp();
+        this.playerNameCache.cleanUp();
+        long cutoff = System.currentTimeMillis() - this.syncCooldown * 2L;
+        this.lastDatabaseSync.entrySet().removeIf(entry -> (Long)entry.getValue() < cutoff);
     }
 
     public void invalidateAll() {
-        blacklistCache.invalidateAll();
-        joinRequestCache.invalidateAll();
-        permissionCache.invalidateAll();
-        playerNameCache.invalidateAll();
-        lastDatabaseSync.clear();
+        this.blacklistCache.invalidateAll();
+        this.joinRequestCache.invalidateAll();
+        this.permissionCache.invalidateAll();
+        this.playerNameCache.invalidateAll();
+        this.lastDatabaseSync.clear();
     }
 
     public CacheStats getStats() {
-        return new CacheStats(
-            blacklistCache.size(),
-            joinRequestCache.size(),
-            permissionCache.size(),
-            playerNameCache.size(),
-            lastDatabaseSync.size()
-        );
+        return new CacheStats(this.blacklistCache.size(), this.joinRequestCache.size(), this.permissionCache.size(), this.playerNameCache.size(), this.lastDatabaseSync.size());
     }
 
     public static class CacheStats {
@@ -133,9 +109,7 @@ public class CacheManager {
         public final long playerNameCacheSize;
         public final int syncTrackingSize;
 
-        public CacheStats(long blacklistCacheSize, long joinRequestCacheSize,
-                         long permissionCacheSize, long playerNameCacheSize,
-                         int syncTrackingSize) {
+        public CacheStats(long blacklistCacheSize, long joinRequestCacheSize, long permissionCacheSize, long playerNameCacheSize, int syncTrackingSize) {
             this.blacklistCacheSize = blacklistCacheSize;
             this.joinRequestCacheSize = joinRequestCacheSize;
             this.permissionCacheSize = permissionCacheSize;
@@ -144,3 +118,4 @@ public class CacheManager {
         }
     }
 }
+

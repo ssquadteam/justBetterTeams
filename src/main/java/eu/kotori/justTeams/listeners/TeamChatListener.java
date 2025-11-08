@@ -1,107 +1,130 @@
 package eu.kotori.justTeams.listeners;
+
 import eu.kotori.justTeams.JustTeams;
 import eu.kotori.justTeams.config.MessageManager;
 import eu.kotori.justTeams.team.Team;
 import eu.kotori.justTeams.team.TeamManager;
 import io.papermc.paper.event.player.AsyncChatEvent;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
-public class TeamChatListener implements Listener {
+
+public class TeamChatListener
+implements Listener {
     private final TeamManager teamManager;
     private final MessageManager messageManager;
-    private final Set<UUID> teamChatEnabled = new HashSet<>();
+    private final Set<UUID> teamChatEnabled = new HashSet<UUID>();
     private final MiniMessage miniMessage;
+
     public TeamChatListener(JustTeams plugin) {
         this.teamManager = plugin.getTeamManager();
         this.messageManager = plugin.getMessageManager();
         this.miniMessage = plugin.getMiniMessage();
     }
+
     public void toggleTeamChat(Player player) {
+        if (!JustTeams.getInstance().getConfigManager().getBoolean("features.team_chat", true)) {
+            this.messageManager.sendMessage((CommandSender)player, "feature_disabled", new TagResolver[0]);
+            return;
+        }
         UUID uuid = player.getUniqueId();
-        if (teamChatEnabled.contains(uuid)) {
-            teamChatEnabled.remove(uuid);
-            messageManager.sendMessage(player, "team_chat_disabled");
+        if (this.teamChatEnabled.contains(uuid)) {
+            this.teamChatEnabled.remove(uuid);
+            this.messageManager.sendMessage((CommandSender)player, "team_chat_disabled", new TagResolver[0]);
         } else {
-            if (teamManager.getPlayerTeam(uuid) == null) {
-                messageManager.sendMessage(player, "player_not_in_team");
+            if (this.teamManager.getPlayerTeam(uuid) == null) {
+                this.messageManager.sendMessage((CommandSender)player, "player_not_in_team", new TagResolver[0]);
                 return;
             }
-            teamChatEnabled.add(uuid);
-            messageManager.sendMessage(player, "team_chat_enabled");
+            this.teamChatEnabled.add(uuid);
+            this.messageManager.sendMessage((CommandSender)player, "team_chat_enabled", new TagResolver[0]);
         }
     }
-    
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+
+    @EventHandler(priority=EventPriority.HIGHEST, ignoreCancelled=true)
     public void onPlayerChat(AsyncChatEvent event) {
+        String finalMessageContent;
+        String character;
+        if (!JustTeams.getInstance().getConfigManager().getBoolean("features.team_chat", true)) {
+            return;
+        }
         Player player = event.getPlayer();
         String messageContent = PlainTextComponentSerializer.plainText().serialize(event.message());
-        Team team = teamManager.getPlayerTeam(player.getUniqueId());
+        Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
         if (team == null) {
             return;
         }
         boolean isCharacterBasedTeamChat = false;
-        boolean isToggleTeamChat = teamChatEnabled.contains(player.getUniqueId());
-        if (JustTeams.getInstance().getConfigManager().getBoolean("team_chat.character_enabled", true)) {
-            String character = JustTeams.getInstance().getConfigManager().getString("team_chat.character", "#");
+        boolean isToggleTeamChat = this.teamChatEnabled.contains(player.getUniqueId());
+        if (JustTeams.getInstance().getConfigManager().getBoolean("team_chat.character_enabled", true) && (character = JustTeams.getInstance().getConfigManager().getString("team_chat.character", "#")) != null && !character.isEmpty() && !character.isBlank()) {
             boolean requireSpace = JustTeams.getInstance().getConfigManager().getBoolean("team_chat.require_space", false);
-            if (requireSpace) {
-                isCharacterBasedTeamChat = messageContent.startsWith(character + " ");
-            } else {
-                isCharacterBasedTeamChat = messageContent.startsWith(character);
-            }
+            isCharacterBasedTeamChat = requireSpace ? messageContent.startsWith(character + " ") : messageContent.startsWith(character);
         }
         if (!isToggleTeamChat && !isCharacterBasedTeamChat) {
             return;
         }
         event.setCancelled(true);
-        final String finalMessageContent;
+        event.viewers().clear();
         if (isCharacterBasedTeamChat) {
-            String character = JustTeams.getInstance().getConfigManager().getString("team_chat.character", "#");
+            String character2 = JustTeams.getInstance().getConfigManager().getString("team_chat.character", "#");
             boolean requireSpace = JustTeams.getInstance().getConfigManager().getBoolean("team_chat.require_space", false);
-            if (requireSpace) {
-                finalMessageContent = messageContent.substring(character.length() + 1);
-            } else {
-                finalMessageContent = messageContent.substring(character.length());
-            }
+            finalMessageContent = requireSpace ? messageContent.substring(character2.length() + 1) : messageContent.substring(character2.length());
         } else {
             finalMessageContent = messageContent;
         }
         if (finalMessageContent.toLowerCase().contains("password") || finalMessageContent.toLowerCase().contains("pass")) {
-            messageManager.sendMessage(player, "team_chat_password_warning");
+            this.messageManager.sendMessage((CommandSender)player, "team_chat_password_warning", new TagResolver[0]);
             return;
         }
-        String format = messageManager.getRawMessage("team_chat_format");
-        Component formattedMessage = miniMessage.deserialize(format,
-                Placeholder.unparsed("player", player.getName()),
-                Placeholder.unparsed("team_name", team.getName()),
-                Placeholder.unparsed("message", finalMessageContent)
-        );
-        team.getMembers().stream()
-                .map(member -> member.getBukkitPlayer())
-                .filter(onlinePlayer -> onlinePlayer != null)
-                .forEach(onlinePlayer -> onlinePlayer.sendMessage(formattedMessage));
+        String format = this.messageManager.getRawMessage("team_chat_format");
+        String playerPrefix = JustTeams.getInstance().getPlayerPrefix(player);
+        String playerSuffix = JustTeams.getInstance().getPlayerSuffix(player);
+        Component formattedMessage = this.miniMessage.deserialize(format, new TagResolver[]{Placeholder.unparsed((String)"player", (String)player.getName()), Placeholder.unparsed((String)"prefix", (String)playerPrefix), Placeholder.unparsed((String)"player_prefix", (String)playerPrefix), Placeholder.unparsed((String)"suffix", (String)playerSuffix), Placeholder.unparsed((String)"player_suffix", (String)playerSuffix), Placeholder.unparsed((String)"team_name", (String)team.getName()), Placeholder.unparsed((String)"message", (String)finalMessageContent)});
+        team.getMembers().stream().map(member -> member.getBukkitPlayer()).filter(onlinePlayer -> onlinePlayer != null).forEach(onlinePlayer -> onlinePlayer.sendMessage(formattedMessage));
         if (JustTeams.getInstance().getConfigManager().isCrossServerSyncEnabled()) {
             JustTeams.getInstance().getTaskRunner().runAsync(() -> {
                 try {
-                    JustTeams.getInstance().getStorageManager().getStorage().addCrossServerMessage(
-                        team.getId(),
-                        player.getUniqueId().toString(),
-                        finalMessageContent,
-                        JustTeams.getInstance().getConfigManager().getServerIdentifier()
-                    );
+                    String currentServer = JustTeams.getInstance().getConfigManager().getServerIdentifier();
+                    if (JustTeams.getInstance().getConfigManager().isRedisEnabled() && JustTeams.getInstance().getRedisManager().isAvailable()) {
+                        ((CompletableFuture)JustTeams.getInstance().getRedisManager().publishTeamChat(team.getId(), player.getUniqueId().toString(), player.getName(), finalMessageContent).thenAccept(success -> {
+                            if (success.booleanValue()) {
+                                JustTeams.getInstance().getLogger().info("\u2713 Team chat sent via Redis (instant)");
+                            } else {
+                                JustTeams.getInstance().getLogger().warning("Redis publish failed, storing in MySQL for polling");
+                                this.storeChatToMySQL(team.getId(), player.getUniqueId().toString(), finalMessageContent, currentServer);
+                            }
+                        })).exceptionally(ex -> {
+                            JustTeams.getInstance().getLogger().warning("Redis error: " + ex.getMessage() + ", using MySQL fallback");
+                            this.storeChatToMySQL(team.getId(), player.getUniqueId().toString(), finalMessageContent, currentServer);
+                            return null;
+                        });
+                    } else {
+                        this.storeChatToMySQL(team.getId(), player.getUniqueId().toString(), finalMessageContent, currentServer);
+                    }
                 } catch (Exception e) {
-                    JustTeams.getInstance().getLogger().warning("Failed to store cross-server message: " + e.getMessage());
+                    JustTeams.getInstance().getLogger().warning("Failed to send cross-server message: " + e.getMessage());
                 }
             });
         }
     }
+
+    private void storeChatToMySQL(int teamId, String playerUuid, String message, String sourceServer) {
+        try {
+            JustTeams.getInstance().getStorageManager().getStorage().addCrossServerMessage(teamId, playerUuid, message, sourceServer);
+        } catch (Exception e) {
+            JustTeams.getInstance().getLogger().warning("Failed to store message to MySQL: " + e.getMessage());
+        }
+    }
 }
+

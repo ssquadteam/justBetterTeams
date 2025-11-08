@@ -1,20 +1,30 @@
 package eu.kotori.justTeams.storage;
+
 import eu.kotori.justTeams.JustTeams;
+import eu.kotori.justTeams.storage.DatabaseStorage;
+import eu.kotori.justTeams.storage.IDataStorage;
+
 public class StorageManager {
     private final IDataStorage storage;
+
     public StorageManager(JustTeams plugin) {
         this.storage = new DatabaseStorage(plugin);
     }
+
     public boolean init() {
-        return storage.init();
+        return this.storage.init();
     }
+
     public void shutdown() {
-        storage.shutdown();
+        this.storage.shutdown();
     }
+
     public IDataStorage getStorage() {
-        return storage;
+        return this.storage;
     }
+
     public boolean isConnected() {
-        return storage.isConnected();
+        return this.storage.isConnected();
     }
 }
+

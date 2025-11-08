@@ -1,85 +1,211 @@
 package eu.kotori.justTeams.storage;
+
 import eu.kotori.justTeams.team.BlacklistedPlayer;
 import eu.kotori.justTeams.team.Team;
 import eu.kotori.justTeams.team.TeamPlayer;
 import eu.kotori.justTeams.team.TeamRole;
-import org.bukkit.Location;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.bukkit.Location;
+
 public interface IDataStorage {
-    record TeamHome(Location location, String serverName) {}
-    record TeamWarp(String name, String location, String serverName, String password) {}
-    record TeamEnderChestLock(int teamId, String serverName, Timestamp lockTime) {}
-    record CrossServerUpdate(int id, int teamId, String updateType, String playerUuid, String serverName, Timestamp timestamp) {}
-    record CrossServerMessage(int id, int teamId, String playerUuid, String message, String serverName, Timestamp timestamp) {}
-    boolean init();
-    void shutdown();
-    void cleanup();
-    boolean isConnected();
-    Optional<Team> createTeam(String name, String tag, UUID ownerUuid, boolean defaultPvpStatus, boolean defaultPublicStatus);
-    void deleteTeam(int teamId);
-    void addMemberToTeam(int teamId, UUID playerUuid);
-    void removeMemberFromTeam(UUID playerUuid);
-    Optional<Team> findTeamByPlayer(UUID playerUuid);
-    Optional<Team> findTeamByName(String name);
-    Optional<Team> findTeamById(int id);
-    List<Team> getAllTeams();
-    List<TeamPlayer> getTeamMembers(int teamId);
-    void setTeamHome(int teamId, Location location, String serverName);
-    void deleteTeamHome(int teamId);
-    Optional<TeamHome> getTeamHome(int teamId);
-    void setTeamTag(int teamId, String tag);
-    void setTeamDescription(int teamId, String description);
-    void transferOwnership(int teamId, UUID newOwnerUuid, UUID oldOwnerUuid);
-    void setPvpStatus(int teamId, boolean status);
-    void setPublicStatus(int teamId, boolean isPublic);
-    void updateTeamBalance(int teamId, double balance);
-    void updateTeamStats(int teamId, int kills, int deaths);
-    void saveEnderChest(int teamId, String serializedInventory);
-    String getEnderChest(int teamId);
-    void updateMemberPermissions(int teamId, UUID memberUuid, boolean canWithdraw, boolean canUseEnderChest, boolean canSetHome, boolean canUseHome) throws SQLException;
-    void updateMemberRole(int teamId, UUID memberUuid, TeamRole role);
-    void updateMemberEditingPermissions(int teamId, UUID memberUuid, boolean canEditMembers, boolean canEditCoOwners, boolean canKickMembers, boolean canPromoteMembers, boolean canDemoteMembers);
-    Map<Integer, Team> getTopTeamsByKills(int limit);
-    Map<Integer, Team> getTopTeamsByBalance(int limit);
-    Map<Integer, Team> getTopTeamsByMembers(int limit);
-    void updateServerHeartbeat(String serverName);
-    Map<String, Timestamp> getActiveServers();
-    void addPendingTeleport(UUID playerUuid, String serverName, Location location);
-    Optional<Location> getAndRemovePendingTeleport(UUID playerUuid, String currentServer);
-    boolean acquireEnderChestLock(int teamId, String serverIdentifier);
-    void releaseEnderChestLock(int teamId);
-    Optional<TeamEnderChestLock> getEnderChestLock(int teamId);
-    void addJoinRequest(int teamId, UUID playerUuid);
-    void removeJoinRequest(int teamId, UUID playerUuid);
-    List<UUID> getJoinRequests(int teamId);
-    boolean hasJoinRequest(int teamId, UUID playerUuid);
-    void clearAllJoinRequests(UUID playerUuid);
-    void setWarp(int teamId, String warpName, Location location, String serverName, String password);
-    void deleteWarp(int teamId, String warpName);
-    Optional<TeamWarp> getWarp(int teamId, String warpName);
-    List<TeamWarp> getWarps(int teamId);
-    int getTeamWarpCount(int teamId);
-    boolean teamWarpExists(int teamId, String warpName);
-    boolean setTeamWarp(int teamId, String warpName, String locationString, String serverName, String password);
-    boolean deleteTeamWarp(int teamId, String warpName);
-    Optional<TeamWarp> getTeamWarp(int teamId, String warpName);
-    List<TeamWarp> getTeamWarps(int teamId);
-    void addCrossServerUpdate(int teamId, String updateType, String playerUuid, String serverName);
-    void addCrossServerUpdatesBatch(List<CrossServerUpdate> updates);
-    List<CrossServerUpdate> getCrossServerUpdates(String serverName);
-    void removeCrossServerUpdate(int updateId);
-    void addCrossServerMessage(int teamId, String playerUuid, String message, String serverName);
-    List<CrossServerMessage> getCrossServerMessages(String serverName);
-    void removeCrossServerMessage(int messageId);
-    void cleanupAllEnderChestLocks();
-    void cleanupStaleEnderChestLocks(int hoursOld);
-    boolean addPlayerToBlacklist(int teamId, UUID playerUuid, String playerName, String reason, UUID blacklistedByUuid, String blacklistedByName) throws SQLException;
-    boolean removePlayerFromBlacklist(int teamId, UUID playerUuid) throws SQLException;
-    boolean isPlayerBlacklisted(int teamId, UUID playerUuid) throws SQLException;
-    List<BlacklistedPlayer> getTeamBlacklist(int teamId) throws SQLException;
+    public boolean init();
+
+    public void shutdown();
+
+    public void cleanup();
+
+    public boolean isConnected();
+
+    public Optional<Team> createTeam(String var1, String var2, UUID var3, boolean var4, boolean var5);
+
+    public void deleteTeam(int var1);
+
+    public boolean addMemberToTeam(int var1, UUID var2);
+
+    public void removeMemberFromTeam(UUID var1);
+
+    public Optional<Team> findTeamByPlayer(UUID var1);
+
+    public Optional<Team> findTeamByName(String var1);
+
+    public Optional<Team> findTeamById(int var1);
+
+    public List<Team> getAllTeams();
+
+    public List<TeamPlayer> getTeamMembers(int var1);
+
+    public void setTeamHome(int var1, Location var2, String var3);
+
+    public void deleteTeamHome(int var1);
+
+    public Optional<TeamHome> getTeamHome(int var1);
+
+    public void setTeamTag(int var1, String var2);
+
+    public void setTeamDescription(int var1, String var2);
+
+    public void transferOwnership(int var1, UUID var2, UUID var3);
+
+    public void setPvpStatus(int var1, boolean var2);
+
+    public void setPublicStatus(int var1, boolean var2);
+
+    public void updateTeamBalance(int var1, double var2);
+
+    public void updateTeamStats(int var1, int var2, int var3);
+
+    public void saveEnderChest(int var1, String var2);
+
+    public String getEnderChest(int var1);
+
+    public void updateMemberPermissions(int var1, UUID var2, boolean var3, boolean var4, boolean var5, boolean var6) throws SQLException;
+
+    public void updateMemberPermission(int var1, UUID var2, String var3, boolean var4) throws SQLException;
+
+    public void updateMemberRole(int var1, UUID var2, TeamRole var3);
+
+    public void updateMemberEditingPermissions(int var1, UUID var2, boolean var3, boolean var4, boolean var5, boolean var6, boolean var7);
+
+    public Map<Integer, Team> getTopTeamsByKills(int var1);
+
+    public Map<Integer, Team> getTopTeamsByBalance(int var1);
+
+    public Map<Integer, Team> getTopTeamsByMembers(int var1);
+
+    public void updateServerHeartbeat(String var1);
+
+    public Map<String, Timestamp> getActiveServers();
+
+    public void addPendingTeleport(UUID var1, String var2, Location var3);
+
+    public Optional<Location> getAndRemovePendingTeleport(UUID var1, String var2);
+
+    public boolean acquireEnderChestLock(int var1, String var2);
+
+    public void releaseEnderChestLock(int var1);
+
+    public Optional<TeamEnderChestLock> getEnderChestLock(int var1);
+
+    public void addJoinRequest(int var1, UUID var2);
+
+    public void removeJoinRequest(int var1, UUID var2);
+
+    public List<UUID> getJoinRequests(int var1);
+
+    public boolean hasJoinRequest(int var1, UUID var2);
+
+    public void clearAllJoinRequests(UUID var1);
+
+    public void setWarp(int var1, String var2, Location var3, String var4, String var5);
+
+    public void deleteWarp(int var1, String var2);
+
+    public Optional<TeamWarp> getWarp(int var1, String var2);
+
+    public List<TeamWarp> getWarps(int var1);
+
+    public int getTeamWarpCount(int var1);
+
+    public boolean teamWarpExists(int var1, String var2);
+
+    public boolean setTeamWarp(int var1, String var2, String var3, String var4, String var5);
+
+    public boolean deleteTeamWarp(int var1, String var2);
+
+    public Optional<TeamWarp> getTeamWarp(int var1, String var2);
+
+    public List<TeamWarp> getTeamWarps(int var1);
+
+    public void addCrossServerUpdate(int var1, String var2, String var3, String var4);
+
+    public void addCrossServerUpdatesBatch(List<CrossServerUpdate> var1);
+
+    public List<CrossServerUpdate> getCrossServerUpdates(String var1);
+
+    public void removeCrossServerUpdate(int var1);
+
+    public void addCrossServerMessage(int var1, String var2, String var3, String var4);
+
+    public List<CrossServerMessage> getCrossServerMessages(String var1);
+
+    public void removeCrossServerMessage(int var1);
+
+    public void cleanupAllEnderChestLocks();
+
+    public void cleanupStaleEnderChestLocks(int var1);
+
+    public boolean addPlayerToBlacklist(int var1, UUID var2, String var3, String var4, UUID var5, String var6) throws SQLException;
+
+    public boolean removePlayerFromBlacklist(int var1, UUID var2) throws SQLException;
+
+    public boolean isPlayerBlacklisted(int var1, UUID var2) throws SQLException;
+
+    public List<BlacklistedPlayer> getTeamBlacklist(int var1) throws SQLException;
+
+    public Optional<UUID> getPlayerUuidByName(String var1);
+
+    public void cachePlayerName(UUID var1, String var2);
+
+    public Optional<String> getPlayerNameByUuid(UUID var1);
+
+    public void addTeamInvite(int var1, UUID var2, UUID var3);
+
+    public void removeTeamInvite(int var1, UUID var2);
+
+    public boolean hasTeamInvite(int var1, UUID var2);
+
+    public List<Integer> getPlayerInvites(UUID var1);
+
+    public List<TeamInvite> getPlayerInvitesWithDetails(UUID var1);
+
+    public void clearPlayerInvites(UUID var1);
+
+    public void updatePlayerSession(UUID var1, String var2);
+
+    public Optional<PlayerSession> getPlayerSession(UUID var1);
+
+    public Map<UUID, PlayerSession> getTeamPlayerSessions(int var1);
+
+    public void cleanupStaleSessions(int var1);
+
+    public void setServerAlias(String var1, String var2);
+
+    public Optional<String> getServerAlias(String var1);
+
+    public Map<String, String> getAllServerAliases();
+
+    public void removeServerAlias(String var1);
+
+    public void setTeamRenameTimestamp(int var1, Timestamp var2);
+
+    public Optional<Timestamp> getTeamRenameTimestamp(int var1);
+
+    public void setTeamName(int var1, String var2);
+
+    public record PlayerSession(UUID playerUuid, String serverName, Timestamp lastSeen) {
+    }
+
+    public record TeamInvite(int teamId, String teamName, UUID inviterUuid, String inviterName, Timestamp createdAt) {
+    }
+
+    public record CrossServerMessage(int id, int teamId, String playerUuid, String message, String serverName, Timestamp timestamp) {
+    }
+
+    public record CrossServerUpdate(int id, int teamId, String updateType, String playerUuid, String serverName, Timestamp timestamp) {
+    }
+
+    public record TeamEnderChestLock(int teamId, String serverName, Timestamp lockTime) {
+    }
+
+    public record TeamWarp(String name, String location, String serverName, String password) {
+    }
+
+    public record TeamHome(Location location, String serverName) {
+    }
 }
+

@@ -22,14 +22,14 @@
 # ===================================================================
 
 # Message configuration version - DO NOT MODIFY
-messages-version: 6
+messages-version: 7
 
 # ===================================================================
 #                         Core Branding
 # ===================================================================
 
 # Main plugin prefix used in most messages
-prefix: "<bold><gradient:#4C9DDE:#FFD700>JustTeams</gradient></bold>"
+prefix: "<#4C9DDE>[ᴛᴇᴀᴍꜱ]</#4C9DDE> "
 reload: "<green>Plugin configurations have been successfully reloaded.</green>"
 reload_commands_notice: "<yellow>Note: Changes to 'commands.yml' require a full server restart to take effect.</yellow>"
 no_permission: "<red>You do not have permission to use this command.</red>"
@@ -88,6 +88,8 @@ invite_accepted: "<green>You have joined the team <white><team></white>.</green>
 invite_accepted_broadcast: "<gray><white><player></white> has joined the team.</gray>"
 invite_denied: "<red>You have denied the invitation from <white><team></white>.</red>"
 invite_denied_broadcast: "<gray><white><player></white> denied the team invitation.</gray>"
+pending_invites_singular: "<yellow>You have 1 pending team invitation. Use /team invites to view it.</yellow>"
+pending_invites_plural: "<yellow>You have <count> pending team invitations. Use /team invites to view them.</yellow>"
 team_is_private: "<red>This team is private. Your request to join has been sent.</red>"
 join_request_sent: "<green>Your request to join <white><team></white> has been sent.</green>"
 already_requested_to_join: "<red>You have already sent a request to join <white><team></white>.</red>"
@@ -95,6 +97,8 @@ join_request_received: "<gray><white><player></white> wants to join your team. U
 no_join_requests: "<gray>There are no pending join requests for your team.</gray>"
 player_joined_public_team: "<green>You have joined the public team <white><team></white>.</green>"
 team_join_error: "<red>An error occurred while trying to join the team. Please try again later.</red>"
+team_creation_error: "<red>An error occurred while creating the team. Please try again later.</red>"
+invite_accept_error: "<red>An error occurred while accepting the invite. Please try again later.</red>"
 joined_team: "<green>You have joined the team <white><team></white>.</green>"
 player_joined_team: "<gray><white><player></white> has joined the team.</gray>"
 join_request_withdrawn: "<green>You have withdrawn your request to join <white><team></white>.</green>"
@@ -111,8 +115,21 @@ transfer_success: "<green>You have transferred ownership of the team to <white><
 transfer_broadcast: "<green><owner> has transferred ownership of the team to <white><player></white>.</green>"
 cannot_transfer_to_self: "<red>You cannot transfer the team to yourself.</red>"
 tag_set: "<green>Team tag has been changed to <white><tag></white>.</green>"
+rename_success: "<green>Team name has been changed from <white><old_name></white> to <white><new_name></white>.</green>"
+rename_broadcast: "<gray>The team <white><old_name></white> has been renamed to <white><new_name></white>.</gray>"
+rename_cooldown: "<red>Your team can be renamed again in <white><time></white>.</red>"
+rename_too_expensive: "<red>You need <white><cost></white> to rename your team. You have <white><balance></white>.</red>"
+rename_same_name: "<red>The new name is the same as the current name.</red>"
+rename_usage: "<red>Usage: /team rename <new_name></red>"
 description_set: "<green>Team description updated.</green>"
 description_too_long: "<red>The description cannot be longer than <white><max_length></white> characters.</red>"
+serveralias_set: "<green>Server alias set: <white><server></white> → <white><alias></white></green>"
+serveralias_removed: "<green>Server alias removed for <white><server></white>.</green>"
+serveralias_list_header: "<yellow>Server Aliases:</yellow>"
+serveralias_list_entry: "<white><server></white> → <yellow><alias></yellow>"
+serveralias_not_found: "<red>No alias set for server <white><server></white>.</red>"
+usage_serveralias: "<red>Usage: /team serveralias <set|remove|list> [server] [alias]</red>"
+target_not_found: "<red>Player <white><target></white> not found or is not online.</red>"
 player_promoted: "<green><target> has been promoted to Co-Owner.</green>"
 player_demoted: "<gray><target> has been demoted to Member.</gray>"
 already_that_role: "<red><target> already has that role.</red>"
@@ -151,6 +168,9 @@ leave_rate_limited: "<red>Leave action is temporarily rate limited. Please wait 
 cannot_edit_owner: "<red>You cannot edit the owner's permissions.</red>"
 team_chat_enabled: "<green>Team chat enabled. All messages will now be sent to your team.</green>"
 team_chat_disabled: "<red>Team chat disabled. Messages will now be public.</red>"
+# Available placeholders: <player>, <prefix>, <player_prefix>, <suffix>, <player_suffix>, <team_name>, <message>
+# <prefix> and <player_prefix> show the player's permission group prefix (requires Vault + LuckPerms/PermissionsEx)
+# Example with prefix: "<dark_gray>[<gradient:#4C9DDE:#FFD700><team_name></gradient>]</dark_gray> <prefix><white><player></white>: <message>"
 team_chat_format: "<dark_gray>[<gradient:#4C9DDE:#FFD700><team_name></gradient>]</dark_gray> <white><player></white>: <message>"
 team_chat_password_warning: "<red>Warning: Please do not share passwords in team chat for security reasons.</red>"
 home_not_set: "<red>Your team does not have a home set. An Owner or Co-Owner can set one with /team sethome.</red>"
@@ -232,6 +252,7 @@ help_entries:
   warp: "<name> [password] - Teleports to a team warp."
   warps: "Lists all team warps."
 usage_create: "<gray>Usage: /team create <name> <tag></gray>"
+usage_create_no_tag: "<gray>Usage: /team create <name></gray>"
 usage_invite: "<gray>Usage: /team invite <player></gray>"
 usage_accept: "<gray>Usage: /team accept <teamName></gray>"
 usage_deny: "<gray>Usage: /team deny <teamName></gray>"
@@ -312,8 +333,8 @@ error_loading_leaderboard: "<red>Error loading leaderboard. Please try again lat
 economy_not_available: "<red>Economy system is not available. Please contact an administrator.</red>"
 bank_insufficient_player_funds: "<red>You don't have enough money to deposit that amount.</red>"
 bank_amount_too_large: "<red>Amount is too large. Maximum allowed is 1 billion.</red>"
-bedrock_player_joined: "<green><player> <gray>(Bedrock) <green>joined the team!</green>"
-bedrock_player_left: "<red><player> <gray>(Bedrock) <red>left the team.</red>"
+bedrock_player_joined: "<green><player> (Bedrock) joined the team!</green>"
+bedrock_player_left: "<red><player> (Bedrock) left the team.</red>"
 bedrock_feature_limited: "<yellow>This feature has limited support on Bedrock Edition.</yellow>"
 cross_platform_team_created: "<green>Cross-platform team created! Java and Bedrock players can now join together.</green>"
 no_teams_found: "<gray>No teams found.</gray>"
@@ -363,3 +384,24 @@ cannot_unblacklist_self: "<red>You cannot unblacklist yourself.</red>"
 player_unblacklisted: "<green>You have removed <white><target></white> from the blacklist.</green>"
 unblacklist_failed: "<red>Failed to remove player from blacklist. Please try again.</red>"
 player_not_blacklisted: "<red><white><target></white> is not blacklisted.</red>"
+
+# ===================================================================
+#                    Feature Restrictions & Costs
+# ===================================================================
+
+# World restriction messages
+feature_disabled_in_world: "<red>The <white><feature></white> feature is disabled in this world (<white><world></white>).</red>"
+
+# Economy cost messages
+insufficient_funds: "<red>You need <white><cost></white> to use this feature but only have <white><balance></white>.</red>"
+economy_charged: "<green>You've been charged <white><cost></white> to use <white><feature></white>.</green>"
+economy_disabled: "<red>Economy is not available on this server.</red>"
+
+# Item cost messages
+insufficient_items: "<red>You need <white><required></white> but only have <white><current></white>.</red>"
+items_taken: "<green>Used <white><items></white> to access <white><feature></white>.</green>"
+invalid_item_format: "<red>Invalid item configuration for <white><feature></white>.</red>"
+
+# Admin enderchest messages
+admin_enderchest_opened: "<green>Successfully opened enderchest for team <white><team_name></white>.</green>"
+
