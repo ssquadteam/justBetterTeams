@@ -49,7 +49,7 @@ public class CommandManager {
             String primaryCommand = this.getPrimaryCommand();
             List<String> aliases = this.getCommandAliases();
             this.registerCommand(primaryCommand, aliases, new TeamCommand(this.plugin), new TeamCommand(this.plugin));
-            this.registerCommand("teammsg", List.of((Object)"tm", (Object)"tmsg"), new TeamMessageCommand(this.plugin), null);
+            this.registerCommand("teammsg", List.of("tm", "tmsg"), new TeamMessageCommand(this.plugin), null);
             this.plugin.getLogger().info("CommandManager: All commands registered successfully");
         } catch (Exception e) {
             this.plugin.getLogger().log(Level.SEVERE, "Failed to register commands.", e);
@@ -80,9 +80,9 @@ public class CommandManager {
     }
 
     public List<String> getCommandAliases() {
-        List aliases = this.commandsConfig.getStringList("aliases");
+        List<String> aliases = this.commandsConfig.getStringList("aliases");
         if (aliases.isEmpty()) {
-            aliases = List.of((Object)"guild", (Object)"clan", (Object)"party");
+            aliases = List.of("guild", "clan", "party");
         }
         return aliases;
     }

@@ -2110,17 +2110,16 @@ public class TeamManager {
                     return;
                 }
                 int maxBatchSize = this.plugin.getConfigManager().getMaxTeamsPerBatch();
-                ArrayList teamNamesList = new ArrayList(teamNames);
+                ArrayList<String> teamNamesList = new ArrayList<>(teamNames);
                 for (int i = 0; i < teamNamesList.size(); i += maxBatchSize) {
                     int endIndex = Math.min(i + maxBatchSize, teamNamesList.size());
-                    List batch = teamNamesList.subList(i, endIndex);
+                    List<String> batch = teamNamesList.subList(i, endIndex);
                     this.plugin.getTaskRunner().runAsync(() -> {
                         for (String teamName : batch) {
                             try {
                                 Optional<Team> dbTeam = this.storage.findTeamByName(teamName);
                                 if (!dbTeam.isPresent()) continue;
-                                Object object = this.cacheLock;
-                                synchronized (object) {
+                                synchronized (this.cacheLock) {
                                     Team cachedTeam = this.teamNameCache.get(teamName);
                                     if (cachedTeam != null) {
                                         this.syncTeamDataAsync(cachedTeam, dbTeam.get());

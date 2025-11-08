@@ -193,8 +193,7 @@ implements IDataStorage {
             this.hikari = new HikariDataSource(config);
             this.plugin.getLogger().info("HikariCP pool created successfully");
             this.plugin.getLogger().info("Testing database connection (this may take up to " + config.getConnectionTimeout() / 1000L + " seconds)...");
-            Connection testConn = this.hikari.getConnection();
-            try {
+            try (Connection testConn = this.hikari.getConnection()) {
                 long connectionTime = System.currentTimeMillis() - startTime;
                 this.plugin.getLogger().info("Database connection test successful! (took " + connectionTime + "ms)");
                 DatabaseMetaData metaData = testConn.getMetaData();
@@ -203,57 +202,44 @@ implements IDataStorage {
                 this.runMigrationsAndSchemaChecks();
                 this.plugin.getLogger().info("Database initialization completed successfully!");
                 bl = true;
-                if (testConn == null) break block48;
-            } catch (Throwable throwable) {
-                try {
-                    if (testConn != null) {
-                        try {
-                            testConn.close();
-                        } catch (Throwable throwable2) {
-                            throwable.addSuppressed(throwable2);
-                        }
+            } catch (Exception e) {
+                this.plugin.getLogger().severe("============================================");
+                this.plugin.getLogger().severe("DATABASE CONNECTION FAILED!");
+                this.plugin.getLogger().severe("============================================");
+                this.plugin.getLogger().severe("Storage type: " + this.storageType);
+                this.plugin.getLogger().severe("Error type: " + e.getClass().getSimpleName());
+                this.plugin.getLogger().severe("Error message: " + e.getMessage());
+                if (useMySQL) {
+                    this.plugin.getLogger().severe("");
+                    this.plugin.getLogger().severe("Troubleshooting steps:");
+                    this.plugin.getLogger().severe("1. Verify MySQL server is running at " + this.plugin.getConfig().getString("storage.mysql.host") + ":" + this.plugin.getConfig().getInt("storage.mysql.port"));
+                    this.plugin.getLogger().severe("2. Verify database '" + this.plugin.getConfig().getString("storage.mysql.database") + "' exists");
+                    this.plugin.getLogger().severe("3. Verify username and password are correct");
+                    this.plugin.getLogger().severe("4. Check firewall allows connection to MySQL port");
+                    this.plugin.getLogger().severe("5. Verify MySQL user has proper permissions (GRANT ALL on database)");
+                    this.plugin.getLogger().severe("");
+                    this.plugin.getLogger().severe("To use H2 (local file storage) instead, change:");
+                    this.plugin.getLogger().severe("  storage.type: \"h2\"");
+                    this.plugin.getLogger().severe("in config.yml");
+                }
+                this.plugin.getLogger().severe("============================================");
+                if (this.hikari != null && !this.hikari.isClosed()) {
+                    try {
+                        this.hikari.close();
+                    } catch (Exception cleanup) {
+                        this.plugin.getLogger().warning("Error during cleanup: " + cleanup.getMessage());
                     }
-                    throw throwable;
-                } catch (Exception e) {
-                    this.plugin.getLogger().severe("============================================");
-                    this.plugin.getLogger().severe("DATABASE CONNECTION FAILED!");
-                    this.plugin.getLogger().severe("============================================");
-                    this.plugin.getLogger().severe("Storage type: " + this.storageType);
-                    this.plugin.getLogger().severe("Error type: " + e.getClass().getSimpleName());
-                    this.plugin.getLogger().severe("Error message: " + e.getMessage());
-                    if (useMySQL) {
-                        this.plugin.getLogger().severe("");
-                        this.plugin.getLogger().severe("Troubleshooting steps:");
-                        this.plugin.getLogger().severe("1. Verify MySQL server is running at " + this.plugin.getConfig().getString("storage.mysql.host") + ":" + this.plugin.getConfig().getInt("storage.mysql.port"));
-                        this.plugin.getLogger().severe("2. Verify database '" + this.plugin.getConfig().getString("storage.mysql.database") + "' exists");
-                        this.plugin.getLogger().severe("3. Verify username and password are correct");
-                        this.plugin.getLogger().severe("4. Check firewall allows connection to MySQL port");
-                        this.plugin.getLogger().severe("5. Verify MySQL user has proper permissions (GRANT ALL on database)");
-                        this.plugin.getLogger().severe("");
-                        this.plugin.getLogger().severe("To use H2 (local file storage) instead, change:");
-                        this.plugin.getLogger().severe("  storage.type: \"h2\"");
-                        this.plugin.getLogger().severe("in config.yml");
-                    }
-                    this.plugin.getLogger().severe("============================================");
-                    if (this.hikari != null && !this.hikari.isClosed()) {
-                        try {
-                            this.hikari.close();
-                        } catch (Exception cleanup) {
-                            this.plugin.getLogger().warning("Error during cleanup: " + cleanup.getMessage());
-                        }
-                    }
-                    if (useMySQL) {
-                        this.plugin.getLogger().severe("MySQL connection failed. Plugin will NOT start.");
-                        this.plugin.getLogger().severe("Fix the database configuration or switch to H2 storage.");
-                        return false;
-                    }
-                    if (!this.storageType.equals("mysql")) {
-                        return this.tryMinimalH2Configuration();
-                    }
+                }
+                if (useMySQL) {
+                    this.plugin.getLogger().severe("MySQL connection failed. Plugin will NOT start.");
+                    this.plugin.getLogger().severe("Fix the database configuration or switch to H2 storage.");
                     return false;
                 }
+                if (!this.storageType.equals("mysql")) {
+                    return this.tryMinimalH2Configuration();
+                }
+                return false;
             }
-            testConn.close();
         }
         return bl;
     }
@@ -448,37 +434,23 @@ implements IDataStorage {
             fallbackConfig.setJdbcUrl("jdbc:h2:" + dataFolder.getAbsolutePath().replace("\\", "/") + "/teams");
             this.plugin.getLogger().info("Testing minimal H2 configuration...");
             this.hikari = new HikariDataSource(fallbackConfig);
-            Connection testConn = this.hikari.getConnection();
-            try {
+            try (Connection testConn = this.hikari.getConnection()) {
                 this.plugin.getLogger().info("Minimal H2 configuration successful!");
                 this.runMigrationsAndSchemaChecks();
                 this.plugin.getLogger().info("Fallback H2 initialization completed successfully!");
                 bl = true;
-                if (testConn == null) break block12;
-            } catch (Throwable throwable) {
-                try {
-                    if (testConn != null) {
-                        try {
-                            testConn.close();
-                        } catch (Throwable throwable2) {
-                            throwable.addSuppressed(throwable2);
-                        }
+            } catch (Exception fallbackError) {
+                this.plugin.getLogger().severe("Even minimal H2 configuration failed: " + fallbackError.getMessage());
+                fallbackError.printStackTrace();
+                if (this.hikari != null && !this.hikari.isClosed()) {
+                    try {
+                        this.hikari.close();
+                    } catch (Exception cleanup) {
+                        this.plugin.getLogger().warning("Error during fallback cleanup: " + cleanup.getMessage());
                     }
-                    throw throwable;
-                } catch (Exception fallbackError) {
-                    this.plugin.getLogger().severe("Even minimal H2 configuration failed: " + fallbackError.getMessage());
-                    fallbackError.printStackTrace();
-                    if (this.hikari != null && !this.hikari.isClosed()) {
-                        try {
-                            this.hikari.close();
-                        } catch (Exception cleanup) {
-                            this.plugin.getLogger().warning("Error during fallback cleanup: " + cleanup.getMessage());
-                        }
-                    }
-                    return false;
                 }
+                return false;
             }
-            testConn.close();
         }
         return bl;
     }
@@ -1331,58 +1303,26 @@ implements IDataStorage {
     }
 
     private boolean tableExists(Connection conn, String tableName) {
-        boolean bl;
-        block8: {
+        try {
             DatabaseMetaData md = conn.getMetaData();
-            ResultSet rs = md.getTables(null, null, tableName, null);
-            try {
-                bl = rs.next();
-                if (rs == null) break block8;
-            } catch (Throwable throwable) {
-                try {
-                    if (rs != null) {
-                        try {
-                            rs.close();
-                        } catch (Throwable throwable2) {
-                            throwable.addSuppressed(throwable2);
-                        }
-                    }
-                    throw throwable;
-                } catch (SQLException e) {
-                    return false;
-                }
+            try (ResultSet rs = md.getTables(null, null, tableName, null)) {
+                return rs.next();
             }
-            rs.close();
+        } catch (SQLException e) {
+            return false;
         }
-        return bl;
     }
 
     private boolean columnExists(Connection conn, String tableName, String columnName) {
-        boolean bl;
-        block8: {
+        try {
             DatabaseMetaData md = conn.getMetaData();
-            ResultSet rs = md.getColumns(null, null, tableName, columnName);
-            try {
-                bl = rs.next();
-                if (rs == null) break block8;
-            } catch (Throwable throwable) {
-                try {
-                    if (rs != null) {
-                        try {
-                            rs.close();
-                        } catch (Throwable throwable2) {
-                            throwable.addSuppressed(throwable2);
-                        }
-                    }
-                    throw throwable;
-                } catch (SQLException e) {
-                    this.plugin.getLogger().warning("Error checking if column exists: " + e.getMessage());
-                    return false;
-                }
+            try (ResultSet rs = md.getColumns(null, null, tableName, columnName)) {
+                return rs.next();
             }
-            rs.close();
+        } catch (SQLException e) {
+            this.plugin.getLogger().warning("Error checking if column exists: " + e.getMessage());
+            return false;
         }
-        return bl;
     }
 
     public Map<String, Object> getDatabaseStats() {

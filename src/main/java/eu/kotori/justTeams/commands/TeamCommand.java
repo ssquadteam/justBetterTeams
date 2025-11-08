@@ -894,19 +894,19 @@ TabCompleter {
     }
 
     private String formatTime(long seconds) {
-        long days;
         if (seconds < 60L) {
             return seconds + " second" + (seconds != 1L ? "s" : "");
         }
         if (seconds < 3600L) {
-            long minutes;
-            return minutes + " minute" + ((minutes = seconds / 60L) != 1L ? "s" : "");
+            long minutes = seconds / 60L;
+            return minutes + " minute" + (minutes != 1L ? "s" : "");
         }
         if (seconds < 86400L) {
-            long hours;
-            return hours + " hour" + ((hours = seconds / 3600L) != 1L ? "s" : "");
+            long hours = seconds / 3600L;
+            return hours + " hour" + (hours != 1L ? "s" : "");
         }
-        return days + " day" + ((days = seconds / 86400L) != 1L ? "s" : "");
+        long days = seconds / 86400L;
+        return days + " day" + (days != 1L ? "s" : "");
     }
 
     private void handleTransfer(Player player, String[] args) {
@@ -1597,7 +1597,7 @@ TabCompleter {
                         }
                         case "backup-config": {
                             player.sendMessage("\u00a7eCreating configuration backups...");
-                            for (String configFile : List.of((Object)"config.yml", (Object)"messages.yml", (Object)"gui.yml", (Object)"commands.yml")) {
+                            for (String configFile : List.of("config.yml", "messages.yml", "gui.yml", "commands.yml")) {
                                 ConfigUpdater.createConfigBackup(this.plugin, configFile);
                             }
                             player.sendMessage("\u00a7aConfiguration backups created! Check backups folder.");
@@ -1866,11 +1866,11 @@ TabCompleter {
                 }
                 case "admin": {
                     if (!this.hasAdminPermission(player)) break;
-                    return List.of((Object)"disband", (Object)"testmigration", (Object)"enderchest", (Object)"performance").stream().filter(cmd -> cmd.toLowerCase().startsWith(args[1].toLowerCase())).collect(Collectors.toList());
+                    return List.of("disband", "testmigration", "enderchest", "performance").stream().filter(cmd -> cmd.toLowerCase().startsWith(args[1].toLowerCase())).collect(Collectors.toList());
                 }
                 case "serveralias": {
                     if (!this.hasAdminPermission(player)) break;
-                    return List.of((Object)"set", (Object)"remove", (Object)"list").stream().filter(cmd -> cmd.toLowerCase().startsWith(args[1].toLowerCase())).collect(Collectors.toList());
+                    return List.of("set", "remove", "list").stream().filter(cmd -> cmd.toLowerCase().startsWith(args[1].toLowerCase())).collect(Collectors.toList());
                 }
             }
         }
@@ -1882,10 +1882,10 @@ TabCompleter {
                 return this.teamManager.getAllTeams().stream().map(Team::getName).filter(name -> name.toLowerCase().startsWith(args[2].toLowerCase())).collect(Collectors.toList());
             }
             if (args[1].toLowerCase().equals("testmigration")) {
-                return List.of((Object)"test", (Object)"migrate", (Object)"validate", (Object)"backup", (Object)"config", (Object)"update-config", (Object)"force-update-config", (Object)"backup-config", (Object)"cleanup-backups").stream().filter(cmd -> cmd.toLowerCase().startsWith(args[2].toLowerCase())).collect(Collectors.toList());
+                return List.of("test", "migrate", "validate", "backup", "config", "update-config", "force-update-config", "backup-config", "cleanup-backups").stream().filter(cmd -> cmd.toLowerCase().startsWith(args[2].toLowerCase())).collect(Collectors.toList());
             }
             if (args[1].toLowerCase().equals("performance")) {
-                return List.of((Object)"database", (Object)"cache", (Object)"tasks", (Object)"optimize", (Object)"cleanup").stream().filter(cmd -> cmd.toLowerCase().startsWith(args[2].toLowerCase())).collect(Collectors.toList());
+                return List.of("database", "cache", "tasks", "optimize", "cleanup").stream().filter(cmd -> cmd.toLowerCase().startsWith(args[2].toLowerCase())).collect(Collectors.toList());
             }
         }
         return new ArrayList<String>();

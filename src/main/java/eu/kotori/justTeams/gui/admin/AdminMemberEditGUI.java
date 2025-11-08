@@ -32,7 +32,7 @@ implements InventoryHolder {
         this.member = member;
         OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer((UUID)member.getPlayerUuid());
         String playerName = targetPlayer.getName() != null ? targetPlayer.getName() : "Unknown";
-        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)54, (Component)plugin.getMiniMessage().deserialize((Object)("<gold><bold>\u1d07\u1d05\u026a\u1d1b \u1d0d\u1d07\u1d0d\u0299\u1d07\u0280</bold></gold> <dark_gray>\u00bb <white>" + playerName)));
+        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)54, (Component)plugin.getMiniMessage().deserialize("<gold><bold>\u1d07\u1d05\u026a\u1d1b \u1d0d\u1d07\u1d0d\u0299\u1d07\u0280</bold></gold> <dark_gray>\u00bb <white>" + playerName));
         this.initializeItems();
     }
 

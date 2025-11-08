@@ -26,7 +26,7 @@ implements InventoryHolder {
         ConfigurationSection guiConfig = guiManager.getGUI("admin-gui");
         String title = guiConfig.getString("title", "\u1d1b\u1d07\u1d00\u1d0d \u1d00\u1d05\u1d0d\u026a\u0274 \u1d18\u1d00\u0274\u1d07\u029f");
         int size = guiConfig.getInt("size", 27);
-        Component titleComponent = MiniMessage.miniMessage().deserialize((Object)title);
+        Component titleComponent = MiniMessage.miniMessage().deserialize(title);
         this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)titleComponent);
         this.initializeItems(guiConfig);
     }

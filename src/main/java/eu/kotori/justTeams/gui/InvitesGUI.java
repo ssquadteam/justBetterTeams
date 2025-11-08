@@ -33,7 +33,7 @@ InventoryHolder {
         ConfigurationSection guiConfig = guiManager.getGUI("invites-gui");
         String title = guiConfig != null ? guiConfig.getString("title", "\u1d18\u1d07\u0274\u1d05\u026a\u0274\u0262 \u026a\u0274\u1d20\u026a\u1d1b\u1d07s") : "\u1d18\u1d07\u0274\u1d05\u026a\u0274\u0262 \u026a\u0274\u1d20\u026a\u1d1b\u1d07s";
         int size = guiConfig != null ? guiConfig.getInt("size", 54) : 54;
-        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize((Object)title));
+        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize(title));
         this.initializeItems();
     }
 

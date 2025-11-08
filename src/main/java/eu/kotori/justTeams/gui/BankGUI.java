@@ -34,7 +34,7 @@ InventoryHolder {
         ConfigurationSection guiConfig = guiManager.getGUI("bank-gui");
         String title = guiConfig.getString("title", "\u1d1b\u1d07\u1d00\u1d0d \u0299\u1d00\u0274\u1d0b");
         int size = guiConfig.getInt("size", 27);
-        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize((Object)title));
+        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize(title));
         this.initializeItems();
     }
 

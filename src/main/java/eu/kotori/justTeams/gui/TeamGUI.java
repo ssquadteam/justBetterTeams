@@ -45,7 +45,7 @@ InventoryHolder {
         ConfigurationSection guiConfig = guiManager.getGUI("team-gui");
         String title = guiConfig.getString("title", "Team").replace("<members>", String.valueOf(team.getMembers().size())).replace("<max_members>", String.valueOf(plugin.getConfigManager().getMaxTeamSize()));
         int size = guiConfig.getInt("size", 54);
-        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize((Object)title));
+        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize(title));
         this.initializeItems();
     }
 
@@ -156,7 +156,7 @@ InventoryHolder {
         ItemBuilder builder = new ItemBuilder(material);
         String name = this.replacePlaceholders(itemConfig.getString("name", ""));
         builder.withName(name);
-        ArrayList lore = new ArrayList(itemConfig.getStringList("lore"));
+        ArrayList<String> lore = new ArrayList<>(itemConfig.getStringList("lore"));
         builder.withLore(lore.stream().map(this::replacePlaceholders).collect(Collectors.toList()));
         String action = itemConfig.getString("action", key);
         builder.withAction(action);
@@ -181,7 +181,7 @@ InventoryHolder {
                 ItemBuilder builder = new ItemBuilder(homeMaterial);
                 String name = this.replacePlaceholders(itemConfig.getString("name", ""));
                 builder.withName(name);
-                List lore = itemConfig.getStringList(teamHomeOpt.isPresent() ? "lore-set" : "lore-not-set");
+                List<String> lore = itemConfig.getStringList(teamHomeOpt.isPresent() ? "lore-set" : "lore-not-set");
                 builder.withLore(lore.stream().map(this::replacePlaceholders).collect(Collectors.toList()));
                 builder.withAction("home");
                 this.inventory.setItem(slot, builder.build());
@@ -301,10 +301,10 @@ InventoryHolder {
 
     public void cycleSort() {
         this.currentSort = switch (this.currentSort) {
-            default -> throw new MatchException(null, null);
             case Team.SortType.JOIN_DATE -> Team.SortType.ALPHABETICAL;
             case Team.SortType.ALPHABETICAL -> Team.SortType.ONLINE_STATUS;
             case Team.SortType.ONLINE_STATUS -> Team.SortType.JOIN_DATE;
+            default -> throw new IllegalStateException("Unknown sort type: " + this.currentSort);
         };
         this.team.setSortType(this.currentSort);
         this.initializeItems();

@@ -27,13 +27,13 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 public class ConfigUpdater {
-    private static final List<String> CONFIG_FILES = List.of((Object)"config.yml", (Object)"messages.yml", (Object)"gui.yml", (Object)"commands.yml", (Object)"placeholders.yml");
+    private static final List<String> CONFIG_FILES = List.of("config.yml", "messages.yml", "gui.yml", "commands.yml", "placeholders.yml");
     public static final Map<String, Set<String>> USER_CUSTOMIZABLE_KEYS = new HashMap<String, Set<String>>(){
         {
-            this.put("config.yml", Set.of((Object[])new String[]{"storage.mysql.host", "storage.mysql.port", "storage.mysql.database", "storage.mysql.username", "storage.mysql.password", "storage.mysql.useSSL", "server-identifier", "main_color", "accent_color", "currency_format", "max_team_size", "max_teams_per_player", "team_creation.min_tag_length", "team_creation.max_tag_length", "team_creation.min_name_length", "team_creation.max_name_length", "debug.enabled", "webhook.url", "webhook.enabled"}));
-            this.put("messages.yml", Set.of((Object)"prefix", (Object)"team_chat_format", (Object)"help_header"));
-            this.put("gui.yml", Set.of((Object)"no-team-gui.title", (Object)"team-gui.title", (Object)"admin-gui.title", (Object)"no-team-gui.items.create-team", (Object)"no-team-gui.items.leaderboards"));
-            this.put("placeholders.yml", Set.of((Object[])new String[]{"colors.primary", "colors.secondary", "colors.accent", "colors.success", "colors.error", "colors.warning", "colors.info", "team_display.format", "team_display.team_icon", "team_display.team_color", "team_display.show_icon", "team_display.show_tag", "team_display.show_name", "team_display.no_team", "team_display.tag_prefix", "team_display.tag_suffix", "team_display.tag_color"}));
+            this.put("config.yml", Set.of("storage.mysql.host", "storage.mysql.port", "storage.mysql.database", "storage.mysql.username", "storage.mysql.password", "storage.mysql.useSSL", "server-identifier", "main_color", "accent_color", "currency_format", "max_team_size", "max_teams_per_player", "team_creation.min_tag_length", "team_creation.max_tag_length", "team_creation.min_name_length", "team_creation.max_name_length", "debug.enabled", "webhook.url", "webhook.enabled"));
+            this.put("messages.yml", Set.of("prefix", "team_chat_format", "help_header"));
+            this.put("gui.yml", Set.of("no-team-gui.title", "team-gui.title", "admin-gui.title", "no-team-gui.items.create-team", "no-team-gui.items.leaderboards"));
+            this.put("placeholders.yml", Set.of("colors.primary", "colors.secondary", "colors.accent", "colors.success", "colors.error", "colors.warning", "colors.info", "team_display.format", "team_display.team_icon", "team_display.team_color", "team_display.show_icon", "team_display.show_tag", "team_display.show_name", "team_display.no_team", "team_display.tag_prefix", "team_display.tag_suffix", "team_display.tag_color"));
             this.put("commands.yml", Set.of());
         }
     };
@@ -249,14 +249,14 @@ public class ConfigUpdater {
             currentConfig.set("team-gui.items.pvp-toggle-locked.material", (Object)"BARRIER");
             currentConfig.set("team-gui.items.pvp-toggle-locked.slot", (Object)12);
             currentConfig.set("team-gui.items.pvp-toggle-locked.name", (Object)"<red>PvP Toggle (Disabled)</red>");
-            currentConfig.set("team-gui.items.pvp-toggle-locked.lore", (Object)List.of((Object)"<gray>This feature has been disabled", (Object)"<gray>by the server administrator."));
+            currentConfig.set("team-gui.items.pvp-toggle-locked.lore", (Object)List.of("<gray>This feature has been disabled", "<gray>by the server administrator."));
             updated = true;
         }
         if (!currentConfig.contains("team-gui.items.warps-locked")) {
             currentConfig.set("team-gui.items.warps-locked.material", (Object)"BARRIER");
             currentConfig.set("team-gui.items.warps-locked.slot", (Object)14);
             currentConfig.set("team-gui.items.warps-locked.name", (Object)"<red>Team Warps (Disabled)</red>");
-            currentConfig.set("team-gui.items.warps-locked.lore", (Object)List.of((Object)"<gray>This feature has been disabled", (Object)"<gray>by the server administrator."));
+            currentConfig.set("team-gui.items.warps-locked.lore", (Object)List.of("<gray>This feature has been disabled", "<gray>by the server administrator."));
             updated = true;
         }
         return updated;
@@ -477,8 +477,8 @@ public class ConfigUpdater {
 
     private static boolean removeObsoleteKeys(FileConfiguration currentConfig, FileConfiguration defaultConfig, String path) {
         boolean updated = false;
-        Set currentKeys = currentConfig.getKeys(true);
-        Set defaultKeys = defaultConfig.getKeys(true);
+        Set<String> currentKeys = currentConfig.getKeys(true);
+        Set<String> defaultKeys = defaultConfig.getKeys(true);
         for (String key : currentKeys) {
             if (defaultKeys.contains(key) || ConfigUpdater.isUserCustomizedValue(currentConfig, key)) continue;
             currentConfig.set(key, null);
@@ -798,11 +798,11 @@ public class ConfigUpdater {
     public static void performConfigHealthCheck(JustTeams plugin) {
         plugin.getLogger().info("Performing configuration health check...");
         boolean allHealthy = true;
-        ArrayList<CallSite> issues = new ArrayList<CallSite>();
+        ArrayList<String> issues = new ArrayList<String>();
         for (String string : CONFIG_FILES) {
             File configFile = new File(plugin.getDataFolder(), string);
             if (!configFile.exists()) {
-                issues.add((CallSite)((Object)(string + ": File missing")));
+                issues.add(string + ": File missing");
                 allHealthy = false;
                 continue;
             }
@@ -810,14 +810,14 @@ public class ConfigUpdater {
                 YamlConfiguration config = YamlConfiguration.loadConfiguration((File)configFile);
                 String versionKey = ConfigUpdater.getVersionKey(string);
                 if (versionKey != null && !config.contains(versionKey)) {
-                    issues.add((CallSite)((Object)(string + ": Missing version key")));
+                    issues.add(string + ": Missing version key");
                     allHealthy = false;
                 }
                 if (!IntelligentConfigHelper.hasCorruptedValues((FileConfiguration)config, string)) continue;
-                issues.add((CallSite)((Object)(string + ": Contains corrupted values")));
+                issues.add(string + ": Contains corrupted values");
                 allHealthy = false;
             } catch (Exception e) {
-                issues.add((CallSite)((Object)(string + ": YAML syntax error - " + e.getMessage())));
+                issues.add(string + ": YAML syntax error - " + e.getMessage());
                 allHealthy = false;
             }
         }
@@ -855,7 +855,7 @@ public class ConfigUpdater {
                 items.set("create-team.slot", (Object)12);
                 items.set("create-team.material", (Object)"WRITABLE_BOOK");
                 items.set("create-team.name", (Object)"<gradient:#4C9DDE:#4C96D2><bold>\u1d04\u0280\u1d07\u1d00\u1d1b\u1d07 \u1d00 \u1d1b\u1d07\u1d00\u1d0d</bold></gradient>");
-                items.set("create-team.lore", (Object)List.of((Object)"<gray>Start your own team and invite your friends!</gray>", (Object)"", (Object)"<yellow>Click to begin the creation process.</yellow>"));
+                items.set("create-team.lore", (Object)List.of("<gray>Start your own team and invite your friends!</gray>", "", "<yellow>Click to begin the creation process.</yellow>"));
                 guiConfig.save(guiFile);
                 plugin.getLogger().info("Successfully restored create-team section");
             }
@@ -864,7 +864,7 @@ public class ConfigUpdater {
                 items.set("leaderboards.slot", (Object)14);
                 items.set("leaderboards.material", (Object)"EMERALD");
                 items.set("leaderboards.name", (Object)"<gradient:#4C9DDE:#4C96D2><bold>\u1d20\u026a\u1d07\u1d21 \u029f\u1d07\u1d00\u1d05\u1d07\u0280\u0299\u1d0f\u1d00\u0280\u1d05s</bold></gradient>");
-                items.set("leaderboards.lore", (Object)List.of((Object)"<gray>See the top teams on the server.</gray>", (Object)"", (Object)"<yellow>Click to view leaderboards.</yellow>"));
+                items.set("leaderboards.lore", (Object)List.of("<gray>See the top teams on the server.</gray>", "", "<yellow>Click to view leaderboards.</yellow>"));
                 guiConfig.save(guiFile);
                 plugin.getLogger().info("Successfully restored leaderboards section");
             }

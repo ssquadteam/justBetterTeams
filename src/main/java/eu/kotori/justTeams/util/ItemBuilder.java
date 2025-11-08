@@ -42,7 +42,7 @@ public class ItemBuilder {
     public ItemBuilder withName(String name) {
         ItemMeta meta = this.itemStack.getItemMeta();
         if (meta != null) {
-            Component component = this.miniMessage.deserialize((Object)name).decoration(TextDecoration.ITALIC, false);
+            Component component = this.miniMessage.deserialize(name).decoration(TextDecoration.ITALIC, false);
             meta.displayName(component);
             this.itemStack.setItemMeta(meta);
         }
@@ -56,7 +56,9 @@ public class ItemBuilder {
     public ItemBuilder withLore(List<String> loreLines) {
         ItemMeta meta = this.itemStack.getItemMeta();
         if (meta != null) {
-            List lore = loreLines.stream().map(line -> this.miniMessage.deserialize(line).decoration(TextDecoration.ITALIC, false)).collect(Collectors.toList());
+            List<Component> lore = loreLines.stream()
+                .map(line -> this.miniMessage.deserialize(line).decoration(TextDecoration.ITALIC, false))
+                .collect(Collectors.toList());
             meta.lore(lore);
             this.itemStack.setItemMeta(meta);
         }
@@ -120,7 +122,7 @@ public class ItemBuilder {
         }
         ItemMeta meta = this.itemStack.getItemMeta();
         if (meta != null) {
-            meta.getPersistentDataContainer().set(ItemBuilder.getActionKey(), PersistentDataType.STRING, (Object)action);
+            meta.getPersistentDataContainer().set(ItemBuilder.getActionKey(), PersistentDataType.STRING, action);
             this.itemStack.setItemMeta(meta);
         }
         return this;
@@ -132,7 +134,7 @@ public class ItemBuilder {
         }
         ItemMeta meta = this.itemStack.getItemMeta();
         if (meta != null) {
-            meta.getPersistentDataContainer().set(new NamespacedKey((Plugin)JustTeams.getInstance(), key), PersistentDataType.STRING, (Object)value);
+            meta.getPersistentDataContainer().set(new NamespacedKey((Plugin)JustTeams.getInstance(), key), PersistentDataType.STRING, value);
             this.itemStack.setItemMeta(meta);
         }
         return this;

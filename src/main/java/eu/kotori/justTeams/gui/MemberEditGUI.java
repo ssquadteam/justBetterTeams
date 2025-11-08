@@ -42,7 +42,7 @@ InventoryHolder {
         OfflinePlayer target = Bukkit.getOfflinePlayer((UUID)targetUuid);
         String title = guiConfig.getString("title", "Edit: <player_name>").replace("<player_name>", target.getName() != null ? target.getName() : "Unknown");
         int size = guiConfig.getInt("size", 54);
-        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize((Object)title));
+        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize(title));
         this.initializeItems();
     }
 

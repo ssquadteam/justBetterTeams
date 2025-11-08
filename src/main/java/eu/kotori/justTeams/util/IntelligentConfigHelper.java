@@ -313,7 +313,7 @@ public class IntelligentConfigHelper {
             File reportsFolder = new File(plugin.getDataFolder(), "reports");
             reportsFolder.mkdirs();
             File reportFile = new File(reportsFolder, "update_report_" + timestamp + ".txt");
-            ArrayList<Object> reportLines = new ArrayList<Object>();
+            ArrayList<String> reportLines = new ArrayList<>();
             reportLines.add("=== JustTeams Configuration Update Report ===");
             reportLines.add("Timestamp: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
             reportLines.add("Update ID: " + timestamp);
@@ -333,7 +333,7 @@ public class IntelligentConfigHelper {
             reportLines.add("  \u2713 YAML auto-repair");
             reportLines.add("  \u2713 Value validation and sanitization");
             reportLines.add("  \u2713 Emergency recovery procedures");
-            Files.write(reportFile.toPath(), reportLines, new OpenOption[0]);
+            Files.write(reportFile.toPath(), reportLines);
             plugin.getLogger().info("Update report generated: reports/update_report_" + timestamp + ".txt");
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to generate update report: " + e.getMessage());
@@ -346,7 +346,7 @@ public class IntelligentConfigHelper {
             return true;
         }
         if ("placeholders.yml".equals(fileName)) {
-            for (String colorKey : List.of((Object)"colors.primary", (Object)"colors.secondary", (Object)"colors.accent")) {
+            for (String colorKey : List.of("colors.primary", "colors.secondary", "colors.accent")) {
                 String value = config.getString(colorKey, "");
                 if (!value.trim().isEmpty() && !value.equals("\"\"")) continue;
                 return true;

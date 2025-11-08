@@ -52,7 +52,7 @@ extends JedisPubSub {
                 playerSuffix = this.plugin.getPlayerSuffix(onlineSender);
             }
             String formattedMessage = format.replace("<team>", team.getName()).replace("<team_name>", team.getName()).replace("<player>", senderName).replace("<prefix>", playerPrefix).replace("<player_prefix>", playerPrefix).replace("<suffix>", playerSuffix).replace("<player_suffix>", playerSuffix).replace("<message>", messageText);
-            Component component = this.mm.deserialize((Object)formattedMessage);
+            Component component = this.mm.deserialize(formattedMessage);
             this.plugin.getTaskRunner().run(() -> {
                 int delivered = 0;
                 for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {

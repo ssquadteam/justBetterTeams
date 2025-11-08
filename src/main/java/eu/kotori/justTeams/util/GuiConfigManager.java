@@ -58,7 +58,7 @@ public class GuiConfigManager {
         if (!this.guiConfig.isSet(path)) {
             return Collections.emptyList();
         }
-        List list = this.guiConfig.getStringList(path);
+        List<String> list = this.guiConfig.getStringList(path);
         return list.stream().map(this::replacePlaceholders).collect(Collectors.toList());
     }
 
@@ -96,7 +96,7 @@ public class GuiConfigManager {
         if (!this.placeholdersConfig.isSet(path)) {
             return Collections.emptyList();
         }
-        List list = this.placeholdersConfig.getStringList(path);
+        List<String> list = this.placeholdersConfig.getStringList(path);
         return list.stream().map(this::replacePlaceholders).collect(Collectors.toList());
     }
 

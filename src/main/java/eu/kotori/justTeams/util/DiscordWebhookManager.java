@@ -230,8 +230,8 @@ public class DiscordWebhookManager {
         }
         if (eventConfig.getBoolean("show_fields", false)) {
             JsonArray fields = new JsonArray();
-            List fieldsList = eventConfig.getMapList("fields");
-            for (Map fieldMap : fieldsList) {
+            List<Map<?, ?>> fieldsList = eventConfig.getMapList("fields");
+            for (Map<?, ?> fieldMap : fieldsList) {
                 String fieldName = (String)fieldMap.get("name");
                 String fieldValue = (String)fieldMap.get("value");
                 boolean inline = fieldMap.containsKey("inline") ? (Boolean)fieldMap.get("inline") : false;
@@ -247,18 +247,18 @@ public class DiscordWebhookManager {
                 embed.add("fields", fields);
             }
         }
-        Object footer = eventConfig.getString("footer", "");
-        footer = this.replacePlaceholders((String)footer, placeholders);
+        String footer = eventConfig.getString("footer", "");
+        footer = this.replacePlaceholders(footer, placeholders);
         if (this.showServerIp) {
             String serverIp = Bukkit.getIp();
             int serverPort = Bukkit.getPort();
             if (!serverIp.isEmpty()) {
-                footer = (String)footer + " | " + serverIp + ":" + serverPort;
+                footer = footer + " | " + serverIp + ":" + serverPort;
             }
         }
-        if (!((String)footer).isEmpty()) {
+        if (!footer.isEmpty()) {
             JsonObject footerObj = new JsonObject();
-            footerObj.addProperty("text", (String)footer);
+            footerObj.addProperty("text", footer);
             embed.add("footer", footerObj);
         }
         if (eventConfig.getBoolean("timestamp", true)) {

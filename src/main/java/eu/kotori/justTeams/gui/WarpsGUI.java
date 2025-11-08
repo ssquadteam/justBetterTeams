@@ -33,7 +33,7 @@ InventoryHolder {
         ConfigurationSection guiConfig = guiManager.getGUI("warps-gui");
         String title = guiConfig != null ? guiConfig.getString("title", "\u1d1b\u1d07\u1d00\u1d0d \u1d21\u1d00\u0280\u1d18s") : "\u1d1b\u1d07\u1d00\u1d0d \u1d21\u1d00\u0280\u1d18s";
         int size = guiConfig != null ? guiConfig.getInt("size", 54) : 54;
-        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize((Object)title));
+        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize(title));
         this.initializeItems();
     }
 
@@ -75,10 +75,10 @@ InventoryHolder {
                         if (warpConfig == null) continue;
                         String name = warpConfig.getString("name", "<gradient:#4C9D9D:#4C96D2><bold><warp_name></bold></gradient>").replace("<warp_name>", warp.name());
                         List lore = warpConfig.getStringList("lore");
-                        for (int i = 0; i < lore.size(); ++i) {
-                            String line = (String)lore.get(i);
+                        for (int j = 0; j < lore.size(); ++j) {
+                            String line = (String)lore.get(j);
                             line = line.replace("<server_name>", warp.serverName()).replace("<warp_protection_status>", warp.password() != null ? "<red>Password Protected" : "<green>Public").replace("<delete_prompt>", canDelete ? "<red>Right-Click to delete." : "");
-                            lore.set(i, line);
+                            lore.set(j, line);
                         }
                         ItemStack warpItem = new ItemBuilder(warp.password() != null ? Material.IRON_BLOCK : Material.GOLD_BLOCK).withName(name).withLore(lore).withAction("warp_item").withData("warp_name", warp.name()).build();
                         this.inventory.setItem(slot++, warpItem);

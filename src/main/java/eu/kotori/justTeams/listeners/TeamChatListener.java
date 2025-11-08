@@ -97,14 +97,14 @@ implements Listener {
                 try {
                     String currentServer = JustTeams.getInstance().getConfigManager().getServerIdentifier();
                     if (JustTeams.getInstance().getConfigManager().isRedisEnabled() && JustTeams.getInstance().getRedisManager().isAvailable()) {
-                        ((CompletableFuture)JustTeams.getInstance().getRedisManager().publishTeamChat(team.getId(), player.getUniqueId().toString(), player.getName(), finalMessageContent).thenAccept(success -> {
+                        JustTeams.getInstance().getRedisManager().publishTeamChat(team.getId(), player.getUniqueId().toString(), player.getName(), finalMessageContent).thenAccept(success -> {
                             if (success.booleanValue()) {
                                 JustTeams.getInstance().getLogger().info("\u2713 Team chat sent via Redis (instant)");
                             } else {
                                 JustTeams.getInstance().getLogger().warning("Redis publish failed, storing in MySQL for polling");
                                 this.storeChatToMySQL(team.getId(), player.getUniqueId().toString(), finalMessageContent, currentServer);
                             }
-                        })).exceptionally(ex -> {
+                        }).exceptionally(ex -> {
                             JustTeams.getInstance().getLogger().warning("Redis error: " + ex.getMessage() + ", using MySQL fallback");
                             this.storeChatToMySQL(team.getId(), player.getUniqueId().toString(), finalMessageContent, currentServer);
                             return null;

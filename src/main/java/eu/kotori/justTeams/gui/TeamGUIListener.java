@@ -218,17 +218,7 @@ implements Listener {
                 ItemMeta itemMeta = clickedItem.getItemMeta();
                 if (!(itemMeta instanceof SkullMeta) || (skullMeta = (SkullMeta)itemMeta).getPlayerProfile() == null) break;
                 UUID profileId = skullMeta.getPlayerProfile().getId();
-                UUID targetUuid = null;
-                if (profileId instanceof UUID) {
-                    targetUuid = profileId;
-                } else if (profileId instanceof String) {
-                    try {
-                        targetUuid = UUID.fromString((String)((Object)profileId));
-                    } catch (IllegalArgumentException e) {
-                        this.plugin.getDebugLogger().log("Invalid UUID format in player-head click from " + player.getName());
-                        return;
-                    }
-                }
+                UUID targetUuid = profileId;
                 if (targetUuid == null) break;
                 if (targetUuid.equals(player.getUniqueId())) {
                     this.plugin.getMessageManager().sendMessage((CommandSender)player, "cannot_edit_own_permissions", new TagResolver[0]);

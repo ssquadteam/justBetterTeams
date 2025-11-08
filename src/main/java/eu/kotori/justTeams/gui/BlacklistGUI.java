@@ -105,7 +105,7 @@ IRefreshableGUI {
                 this.plugin.getLogger().warning("Action key mismatch! Expected: " + actionKey + ", Actual: " + actualAction);
                 ItemMeta meta = skull.getItemMeta();
                 if (meta != null) {
-                    meta.getPersistentDataContainer().set(JustTeams.getActionKey(), PersistentDataType.STRING, (Object)actionKey);
+                    meta.getPersistentDataContainer().set(JustTeams.getActionKey(), PersistentDataType.STRING, actionKey);
                     skull.setItemMeta(meta);
                     this.plugin.getLogger().info("Manually set action key for " + blacklistedPlayer.getPlayerName());
                 }

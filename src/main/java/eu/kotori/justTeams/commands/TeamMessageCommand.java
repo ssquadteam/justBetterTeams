@@ -77,14 +77,14 @@ TabCompleter {
                 try {
                     String currentServer = JustTeams.getInstance().getConfigManager().getServerIdentifier();
                     if (JustTeams.getInstance().getConfigManager().isRedisEnabled() && JustTeams.getInstance().getRedisManager().isAvailable()) {
-                        ((CompletableFuture)JustTeams.getInstance().getRedisManager().publishTeamMessage(team.getId(), player.getUniqueId().toString(), player.getName(), message).thenAccept(success -> {
+JustTeams.getInstance().getRedisManager().publishTeamMessage(team.getId(), player.getUniqueId().toString(), player.getName(), message).thenAccept(success -> {
                             if (success.booleanValue()) {
                                 JustTeams.getInstance().getLogger().info("\u2713 Team message sent via Redis (instant)");
                             } else {
                                 JustTeams.getInstance().getLogger().warning("Redis publish failed, storing in MySQL for polling");
                                 this.storeMessageToMySQL(team.getId(), player.getUniqueId().toString(), message, currentServer);
                             }
-                        })).exceptionally(ex -> {
+                        }).exceptionally(ex -> {
                             JustTeams.getInstance().getLogger().warning("Redis error: " + ex.getMessage() + ", using MySQL fallback");
                             this.storeMessageToMySQL(team.getId(), player.getUniqueId().toString(), message, currentServer);
                             return null;

@@ -34,7 +34,7 @@ implements InventoryHolder {
         this.viewer = viewer;
         this.targetTeam = targetTeam;
         this.memberPage = memberPage;
-        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)54, (Component)plugin.getMiniMessage().deserialize((Object)("<gold><bold>\u1d0d\u1d00\u0274\u1d00\u0262\u1d07</bold></gold> <dark_gray>\u00bb <white>" + targetTeam.getName())));
+        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)54, (Component)plugin.getMiniMessage().deserialize("<gold><bold>\u1d0d\u1d00\u0274\u1d00\u0262\u1d07</bold></gold> <dark_gray>\u00bb <white>" + targetTeam.getName()));
         this.initializeItems();
     }
 

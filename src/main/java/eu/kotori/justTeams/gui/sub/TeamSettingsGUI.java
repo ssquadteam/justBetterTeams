@@ -36,7 +36,7 @@ InventoryHolder {
             title = guiConfig.getString("title", "\u1d1b\u1d07\u1d00\u1d0d s\u1d07\u1d1b\u1d1b\u026a\u0274\u0262s");
             size = guiConfig.getInt("size", 27);
         }
-        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize((Object)title));
+        this.inventory = Bukkit.createInventory((InventoryHolder)this, (int)size, (Component)plugin.getMiniMessage().deserialize(title));
         this.initializeItems();
     }
 
