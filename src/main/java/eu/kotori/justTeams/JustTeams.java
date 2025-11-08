@@ -265,23 +265,25 @@ extends JavaPlugin {
         long crossServerInterval = this.configManager.getCrossServerSyncInterval();
         long criticalInterval = this.configManager.getCriticalSyncInterval();
         long cacheCleanupInterval = this.configManager.getCacheCleanupInterval();
-        this.taskRunner.runAsyncTaskTimer(() -> {
-            try {
-                IDataStorage patt0$temp = this.storageManager.getStorage();
-                if (patt0$temp instanceof DatabaseStorage) {
-                    DatabaseStorage dbStorage = (DatabaseStorage)patt0$temp;
-                    dbStorage.updateServerHeartbeat(serverName);
-                } else {
-                    this.storageManager.getStorage().updateServerHeartbeat(serverName);
+        if (this.configManager.isCrossServerSyncEnabled() && !this.configManager.isSingleServerMode()) {
+            this.taskRunner.runAsyncTaskTimer(() -> {
+                try {
+                    IDataStorage patt0$temp = this.storageManager.getStorage();
+                    if (patt0$temp instanceof DatabaseStorage) {
+                        DatabaseStorage dbStorage = (DatabaseStorage)patt0$temp;
+                        dbStorage.updateServerHeartbeat(serverName);
+                    } else {
+                        this.storageManager.getStorage().updateServerHeartbeat(serverName);
+                    }
+                    if (this.configManager.isDebugLoggingEnabled()) {
+                        this.debugLogger.log("Updated server heartbeat for: " + serverName);
+                    }
+                } catch (Exception e) {
+                    this.getLogger().warning("Error updating server heartbeat: " + e.getMessage());
                 }
-                if (this.configManager.isDebugLoggingEnabled()) {
-                    this.debugLogger.log("Updated server heartbeat for: " + serverName);
-                }
-            } catch (Exception e) {
-                this.getLogger().warning("Error updating server heartbeat: " + e.getMessage());
-            }
-        }, heartbeatInterval, heartbeatInterval);
-        if (this.configManager.isCrossServerSyncEnabled()) {
+            }, heartbeatInterval, heartbeatInterval);
+        }
+        if (this.configManager.isCrossServerSyncEnabled() && !this.configManager.isSingleServerMode()) {
             this.taskRunner.runAsyncTaskTimer(() -> {
                 try {
                     this.teamManager.syncCrossServerData();
@@ -330,7 +332,7 @@ extends JavaPlugin {
                 this.getLogger().warning("Error cleaning up cache: " + e.getMessage());
             }
         }, cacheCleanupInterval, cacheCleanupInterval);
-        if (this.configManager.isCrossServerSyncEnabled()) {
+        if (this.configManager.isCrossServerSyncEnabled() && !this.configManager.isSingleServerMode()) {
             this.taskRunner.runAsyncTaskTimer(() -> {
                 try {
                     this.storageManager.getStorage().cleanupStaleSessions(15);

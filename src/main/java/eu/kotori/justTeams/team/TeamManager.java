@@ -151,8 +151,9 @@ public class TeamManager {
 
     public void handlePendingTeleport(Player player) {
         String currentServer = this.plugin.getConfigManager().getServerIdentifier();
+        UUID effective = this.getEffectiveUuid(player.getUniqueId());
         this.plugin.getDebugLogger().log("Handling pending teleport check for " + player.getName() + " on server " + currentServer);
-        this.plugin.getTaskRunner().runAsync(() -> this.storage.getAndRemovePendingTeleport(player.getUniqueId(), currentServer).ifPresent(location -> {
+        this.plugin.getTaskRunner().runAsync(() -> this.storage.getAndRemovePendingTeleport(effective, currentServer).ifPresent(location -> {
             this.plugin.getDebugLogger().log("Found pending teleport for " + player.getName() + " to " + String.valueOf(location));
             this.plugin.getTaskRunner().runEntityTaskLater((Entity)player, () -> this.teleportPlayer(player, (Location)location), 5L);
         }));
@@ -189,6 +190,7 @@ public class TeamManager {
                             this.storage.deleteTeam(team.getId());
                             this.publishCrossServerUpdate(team.getId(), "TEAM_DISBANDED", admin.getUniqueId().toString(), team.getName());
                             this.plugin.getTaskRunner().run(() -> {
+                                this.invalidateTeamPlaceholders(team);
                                 team.broadcast("admin_team_disbanded_broadcast", new TagResolver[0]);
                                 this.uncacheTeam(team.getId());
                                 this.messageManager.sendMessage((CommandSender)admin, "admin_team_disbanded", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
@@ -256,17 +258,18 @@ public class TeamManager {
      * WARNING - Removed try catching itself - possible behaviour change.
      */
     private void loadTeamIntoCache(Team team) {
+        String lowerCaseName = team.getName().toLowerCase();
+        List<TeamPlayer> members = this.storage.getTeamMembers(team.getId());
+        List<UUID> joinRequests = this.storage.getJoinRequests(team.getId());
         Object object = this.cacheLock;
         synchronized (object) {
-            String lowerCaseName = team.getName().toLowerCase();
             if (this.teamNameCache.containsKey(lowerCaseName)) {
                 Team cachedTeam = this.teamNameCache.get(lowerCaseName);
                 cachedTeam.getMembers().forEach(member -> this.playerTeamCache.put(member.getPlayerUuid(), cachedTeam));
                 return;
             }
             team.getMembers().clear();
-            team.getMembers().addAll(this.storage.getTeamMembers(team.getId()));
-            List<UUID> joinRequests = this.storage.getJoinRequests(team.getId());
+            team.getMembers().addAll(members);
             team.getJoinRequests().clear();
             for (UUID requestUuid : joinRequests) {
                 team.addJoinRequest(requestUuid);
@@ -318,20 +321,22 @@ public class TeamManager {
      * WARNING - Removed try catching itself - possible behaviour change.
      */
     public void removeFromPlayerTeamCache(UUID playerUuid) {
-        Object object = this.cacheLock;
-        synchronized (object) {
-            this.playerTeamCache.remove(playerUuid);
+        UUID effective = this.getEffectiveUuid(playerUuid);
+        if (this.plugin.getConfigManager().isDebugEnabled() && !effective.equals(playerUuid)) {
+            this.plugin.getDebugLogger().log("UUID normalized on cache remove: raw=" + playerUuid + ", effective=" + effective);
         }
+        this.playerTeamCache.remove(effective);
     }
 
     /*
      * WARNING - Removed try catching itself - possible behaviour change.
      */
     public void addPlayerToTeamCache(UUID playerUuid, Team team) {
-        Object object = this.cacheLock;
-        synchronized (object) {
-            this.playerTeamCache.put(playerUuid, team);
+        UUID effective = this.getEffectiveUuid(playerUuid);
+        if (this.plugin.getConfigManager().isDebugEnabled() && !effective.equals(playerUuid)) {
+            this.plugin.getDebugLogger().log("UUID normalized on cache put: raw=" + playerUuid + ", effective=" + effective);
         }
+        this.playerTeamCache.put(effective, team);
     }
 
     /*
@@ -356,7 +361,11 @@ public class TeamManager {
     /*
      * WARNING - Removed try catching itself - possible behaviour change.
      */
-    public Team getPlayerTeam(UUID playerUuid) {
+    /**
+     * WARNING: Performs database I/O on cache miss. Do NOT call on hot paths or plugin threads that must not block.
+     * Prefer getPlayerTeam (cache-only) or getPlayerTeamAsync for non-blocking access.
+     */
+    private Team getPlayerTeamWithFallback(UUID playerUuid) {
         Object object = this.cacheLock;
         synchronized (object) {
             UUID effectiveUuid = this.getEffectiveUuid(playerUuid);
@@ -371,6 +380,48 @@ public class TeamManager {
             }
             return null;
         }
+    }
+
+    /**
+     * Cache-only team lookup. Never blocks on database I/O.
+     * @return Team if cached, null otherwise. Never blocks on database queries. Safe to call from any thread including PlaceholderAPI threads.
+     */
+    public Team getPlayerTeam(UUID playerUuid) {
+        UUID effectiveUuid = this.getEffectiveUuid(playerUuid);
+        return this.playerTeamCache.get(effectiveUuid);
+    }
+
+    /**
+     * Asynchronously resolves a player's team. If not cached, queries the database off the main thread,
+     * warms the cache, then invokes the callback on the main thread.
+     */
+    public void getPlayerTeamAsync(UUID playerUuid, Consumer<Team> callback) {
+        Team cached = this.getPlayerTeam(playerUuid);
+        if (cached != null) {
+            this.plugin.getTaskRunner().run(() -> callback.accept(cached));
+            return;
+        }
+        UUID effectiveUuid = this.getEffectiveUuid(playerUuid);
+        this.plugin.getTaskRunner().runAsync(() -> {
+            Optional<Team> dbTeam = this.storage.findTeamByPlayer(effectiveUuid);
+            Team result = null;
+            if (dbTeam.isPresent()) {
+                Team team = dbTeam.get();
+                this.loadTeamIntoCache(team);
+                result = team;
+            }
+            Team finalResult = result;
+            this.plugin.getTaskRunner().run(() -> callback.accept(finalResult));
+        });
+    }
+
+    private void invalidateTeamPlaceholders(Team team) {
+        if (team == null) return;
+        try {
+            for (TeamPlayer member : team.getMembers()) {
+                this.plugin.getCacheManager().invalidatePlayerPlaceholders(member.getPlayerUuid());
+            }
+        } catch (Exception ignored) {}
     }
 
     private UUID getEffectiveUuid(UUID playerUuid) {
@@ -421,8 +472,9 @@ public class TeamManager {
             task.cancel();
         }
         if ((team = this.getPlayerTeam(player.getUniqueId())) != null) {
-            this.playerTeamCache.remove(player.getUniqueId());
-            boolean isTeamEmptyOnline = team.getMembers().stream().allMatch(member -> member.getPlayerUuid().equals(player.getUniqueId()) || !member.isOnline());
+            UUID effective = this.getEffectiveUuid(player.getUniqueId());
+            this.playerTeamCache.remove(effective);
+            boolean isTeamEmptyOnline = team.getMembers().stream().allMatch(member -> member.getPlayerUuid().equals(effective) || !member.isOnline());
             if (isTeamEmptyOnline) {
                 if (team.getEnderChest() != null && !team.getEnderChest().getViewers().isEmpty()) {
                     this.saveEnderChest(team);
@@ -433,11 +485,15 @@ public class TeamManager {
     }
 
     public void loadPlayerTeam(Player player) {
-        if (this.playerTeamCache.containsKey(player.getUniqueId())) {
+        UUID effective = this.getEffectiveUuid(player.getUniqueId());
+        if (this.playerTeamCache.containsKey(effective)) {
             return;
         }
+        if (this.plugin.getConfigManager().isDebugEnabled() && !effective.equals(player.getUniqueId())) {
+            this.plugin.getDebugLogger().log("Normalizing UUID for loadPlayerTeam: raw=" + player.getUniqueId() + ", effective=" + effective);
+        }
         this.plugin.getTaskRunner().runAsync(() -> {
-            Optional<Team> teamOpt = this.storage.findTeamByPlayer(player.getUniqueId());
+            Optional<Team> teamOpt = this.storage.findTeamByPlayer(effective);
             this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
                 if (teamOpt.isPresent()) {
                     Team team = (Team)teamOpt.get();
@@ -529,6 +585,7 @@ public class TeamManager {
             this.storage.createTeam(name, tag, owner.getUniqueId(), defaultPvp, defaultPublic).ifPresent(team -> this.plugin.getTaskRunner().runOnEntity((Entity)owner, () -> {
                 this.loadTeamIntoCache((Team)team);
                 this.messageManager.sendMessage((CommandSender)owner, "team_created", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
+                this.plugin.getCacheManager().invalidatePlayerPlaceholders(owner.getUniqueId());
                 EffectsUtil.playSound(owner, EffectsUtil.SoundType.SUCCESS);
                 this.plugin.getWebhookHelper().sendTeamCreateWebhook(owner, (Team)team);
                 this.publishCrossServerUpdate(team.getId(), "TEAM_CREATED", owner.getUniqueId().toString(), team.getName());
@@ -564,6 +621,7 @@ public class TeamManager {
                         if (this.plugin.getConfigManager().isBroadcastTeamDisbandedEnabled()) {
                             team.broadcast("team_disbanded_broadcast", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
                         }
+                        this.invalidateTeamPlaceholders(team);
                         this.messageManager.sendMessage((CommandSender)owner, "team_disbanded", new TagResolver[0]);
                         EffectsUtil.playSound(owner, EffectsUtil.SoundType.SUCCESS);
                     });
@@ -743,7 +801,10 @@ public class TeamManager {
                     this.publishCrossServerUpdate(team.getId(), "MEMBER_JOINED", player.getUniqueId().toString(), player.getName());
                     this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
                         team.addMember(new TeamPlayer(player.getUniqueId(), TeamRole.MEMBER, Instant.now(), false, true, false, true));
-                        this.playerTeamCache.put(player.getUniqueId(), team);
+                        UUID effective = this.getEffectiveUuid(player.getUniqueId());
+                        this.playerTeamCache.put(effective, team);
+                        this.plugin.getCacheManager().invalidatePlayerPlaceholders(player.getUniqueId());
+                        this.invalidateTeamPlaceholders(team);
                         this.plugin.getTaskRunner().runAsync(() -> {
                             Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
                             this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
@@ -805,8 +866,11 @@ public class TeamManager {
             this.publishCrossServerUpdate(team.getId(), "MEMBER_LEFT", player.getUniqueId().toString(), player.getName());
             this.plugin.getWebhookHelper().sendPlayerLeaveWebhook(player.getName(), team);
             this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
-                team.removeMember(player.getUniqueId());
-                this.playerTeamCache.remove(player.getUniqueId());
+                UUID effective = this.getEffectiveUuid(player.getUniqueId());
+                team.removeMember(effective);
+                this.playerTeamCache.remove(effective);
+                this.plugin.getCacheManager().invalidatePlayerPlaceholders(player.getUniqueId());
+                this.invalidateTeamPlaceholders(team);
                 this.plugin.getCacheManager().invalidateTeamSessions(team.getId());
                 this.plugin.getTaskRunner().runAsync(() -> {
                     Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
@@ -858,8 +922,11 @@ public class TeamManager {
                     this.publishCrossServerUpdate(team.getId(), "MEMBER_KICKED", targetUuid.toString(), safeTargetName);
                     this.plugin.getWebhookHelper().sendPlayerKickWebhook(safeTargetName, kicker.getName(), team);
                     this.plugin.getTaskRunner().run(() -> {
-                        team.removeMember(targetUuid);
-                        this.playerTeamCache.remove(targetUuid);
+                        UUID effectiveTarget = this.getEffectiveUuid(targetUuid);
+                        team.removeMember(effectiveTarget);
+                        this.playerTeamCache.remove(effectiveTarget);
+                        this.plugin.getCacheManager().invalidatePlayerPlaceholders(targetUuid);
+                        this.invalidateTeamPlaceholders(team);
                         this.plugin.getCacheManager().invalidateTeamSessions(team.getId());
                         this.plugin.getTaskRunner().runAsync(() -> {
                             Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
@@ -910,8 +977,11 @@ public class TeamManager {
                     this.plugin.getTaskRunner().run(() -> {
                         try {
                             if (team.isMember(targetUuid)) {
-                                team.removeMember(targetUuid);
-                                this.playerTeamCache.remove(targetUuid);
+                                UUID effectiveTarget = this.getEffectiveUuid(targetUuid);
+                                team.removeMember(effectiveTarget);
+                                this.playerTeamCache.remove(effectiveTarget);
+                                this.plugin.getCacheManager().invalidatePlayerPlaceholders(targetUuid);
+                                this.invalidateTeamPlaceholders(team);
                                 this.plugin.getCacheManager().invalidateTeamSessions(team.getId());
                                 // Eager recache sessions
                                 this.plugin.getTaskRunner().runAsync(() -> {
@@ -968,6 +1038,7 @@ public class TeamManager {
             this.storage.updateMemberRole(team.getId(), targetUuid, TeamRole.CO_OWNER);
             this.storage.updateMemberPermissions(team.getId(), targetUuid, true, true, true, true);
             this.storage.updateMemberEditingPermissions(team.getId(), targetUuid, true, false, true, false, false);
+            this.plugin.getCacheManager().invalidatePlayerPlaceholders(targetUuid);
             this.plugin.getLogger().info("Successfully promoted " + String.valueOf(targetUuid) + " in team " + team.getName() + " with updated permissions");
             this.markTeamModified(team.getId());
             this.publishCrossServerUpdate(team.getId(), "MEMBER_PROMOTED", targetUuid.toString(), safeTargetName);
@@ -1055,6 +1126,7 @@ public class TeamManager {
         this.messageManager.sendMessage((CommandSender)player, "tag_set", new TagResolver[]{Placeholder.unparsed((String)"tag", (String)newTag)});
         this.publishCrossServerUpdate(team.getId(), "TEAM_UPDATED", player.getUniqueId().toString(), "tag_change|" + newTag);
         this.forceTeamSync(team.getId());
+        this.invalidateTeamPlaceholders(team);
         EffectsUtil.playSound(player, EffectsUtil.SoundType.SUCCESS);
     }
 
@@ -1077,6 +1149,7 @@ public class TeamManager {
         this.markTeamModified(team.getId());
         this.messageManager.sendMessage((CommandSender)player, "description_set", new TagResolver[0]);
         this.publishCrossServerUpdate(team.getId(), "TEAM_UPDATED", player.getUniqueId().toString(), "description_change");
+        this.invalidateTeamPlaceholders(team);
         EffectsUtil.playSound(player, EffectsUtil.SoundType.SUCCESS);
     }
 
@@ -1125,6 +1198,7 @@ public class TeamManager {
                         }
                         this.messageManager.sendMessage((CommandSender)oldOwner, "transfer_success", new TagResolver[]{Placeholder.unparsed((String)"player", (String)safeNewOwnerName)});
                         team.broadcast("transfer_broadcast", new TagResolver[]{Placeholder.unparsed((String)"owner", (String)oldOwner.getName()), Placeholder.unparsed((String)"player", (String)safeNewOwnerName)});
+                        this.invalidateTeamPlaceholders(team);
                         EffectsUtil.playSound(oldOwner, EffectsUtil.SoundType.SUCCESS);
                     });
                 });
@@ -1149,7 +1223,8 @@ public class TeamManager {
         this.plugin.getTaskRunner().runAsync(() -> {
             this.storage.setPvpStatus(team.getId(), newStatus);
             this.markTeamModified(team.getId());
-            this.publishCrossServerUpdate(team.getId(), "TEAM_UPDATED", player.getUniqueId().toString(), "pvp_toggle|" + newStatus);
+        this.publishCrossServerUpdate(team.getId(), "TEAM_UPDATED", player.getUniqueId().toString(), "pvp_toggle|" + newStatus);
+        this.invalidateTeamPlaceholders(team);
         });
         if (newStatus) {
             team.broadcast("team_pvp_enabled", new TagResolver[0]);
@@ -1225,6 +1300,7 @@ public class TeamManager {
                     return;
                 }
                 IDataStorage.TeamHome teamHome = (IDataStorage.TeamHome)((Object)((Object)((Object)teamHomeOpt.get())));
+                final UUID effective = this.getEffectiveUuid(player.getUniqueId());
                 TeamPlayer member = team.getMember(player.getUniqueId());
                 if (member == null || !member.canUseHome()) {
                     this.messageManager.sendMessage((CommandSender)player, "no_permission", new TagResolver[0]);
@@ -1247,7 +1323,7 @@ public class TeamManager {
                 } else {
                     this.plugin.getDebugLogger().log("Player is on the wrong server. Initiating cross-server teleport via database.");
                     this.plugin.getTaskRunner().runAsync(() -> {
-                        this.storage.addPendingTeleport(player.getUniqueId(), homeServer, teamHome.location());
+                        this.storage.addPendingTeleport(effective, homeServer, teamHome.location());
                         this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
                             String connectChannel = "BungeeCord";
                             this.messageManager.sendMessage((CommandSender)player, "proxy_not_enabled", new TagResolver[0]);
@@ -1393,6 +1469,7 @@ public class TeamManager {
         this.plugin.getTaskRunner().runAsync(() -> this.storage.updateTeamBalance(team.getId(), team.getBalance()));
         this.markTeamModified(team.getId());
         this.publishCrossServerUpdate(team.getId(), "BANK_DEPOSIT", player.getUniqueId().toString(), String.valueOf(amount));
+        this.invalidateTeamPlaceholders(team);
         String formattedAmount = this.formatCurrency(amount);
         String formattedBalance = this.formatCurrency(team.getBalance());
         this.messageManager.sendMessage((CommandSender)player, "bank_deposit_success", new TagResolver[]{Placeholder.unparsed((String)"amount", (String)formattedAmount), Placeholder.unparsed((String)"balance", (String)formattedBalance)});
@@ -1431,6 +1508,7 @@ public class TeamManager {
         this.plugin.getTaskRunner().runAsync(() -> this.storage.updateTeamBalance(team.getId(), team.getBalance()));
         this.markTeamModified(team.getId());
         this.publishCrossServerUpdate(team.getId(), "BANK_WITHDRAW", player.getUniqueId().toString(), String.valueOf(amount));
+        this.invalidateTeamPlaceholders(team);
         String formattedAmount = this.formatCurrency(amount);
         String formattedBalance = this.formatCurrency(team.getBalance());
         this.messageManager.sendMessage((CommandSender)player, "bank_withdraw_success", new TagResolver[]{Placeholder.unparsed((String)"amount", (String)formattedAmount), Placeholder.unparsed((String)"balance", (String)formattedBalance)});
@@ -1761,6 +1839,7 @@ public class TeamManager {
             this.messageManager.sendMessage((CommandSender)player, "team_made_private", new TagResolver[0]);
         }
         EffectsUtil.playSound(player, EffectsUtil.SoundType.SUCCESS);
+        this.invalidateTeamPlaceholders(team);
     }
 
     public void joinTeam(Player player, String teamName) {

@@ -45,8 +45,14 @@ extends PlaceholderExpansion {
             return "";
         }
         try {
+            String cached = this.plugin.getCacheManager().getCachedPlaceholder(player.getUniqueId(), params);
+            if (cached != null) {
+                return cached;
+            }
             if (params.equalsIgnoreCase("has_team")) {
-                return this.plugin.getTeamManager().getPlayerTeam(player.getUniqueId()) != null ? "yes" : "no";
+                String value = this.plugin.getTeamManager().getPlayerTeam(player.getUniqueId()) != null ? "yes" : "no";
+                this.plugin.getCacheManager().cachePlaceholderResult(player.getUniqueId(), params, value);
+                return value;
             }
             Team team = this.plugin.getTeamManager().getPlayerTeam(player.getUniqueId());
             if (params.equalsIgnoreCase("display")) {
@@ -70,10 +76,14 @@ extends PlaceholderExpansion {
                 if (showTag) {
                     result = result.replace(tagPrefix + team.getColoredTag() + tagSuffix, "<" + tagColor + ">" + tagPrefix + team.getColoredTag() + tagSuffix + "</" + tagColor + ">");
                 }
+                this.plugin.getCacheManager().cachePlaceholderResult(player.getUniqueId(), params, result);
                 return result;
             }
             if (team == null) {
-                return this.plugin.getMessageManager().getRawMessage("no_team_placeholder");
+                this.plugin.getTeamManager().getPlayerTeamAsync(player.getUniqueId(), t -> {});
+                String value = this.plugin.getMessageManager().getRawMessage("no_team_placeholder");
+                this.plugin.getCacheManager().cachePlaceholderResult(player.getUniqueId(), params, value);
+                return value;
             }
             switch (params.toLowerCase()) {
                 case "name": 
@@ -96,7 +106,8 @@ extends PlaceholderExpansion {
                 }
                 case "owner": 
                 case "team_owner": {
-                    return this.plugin.getServer().getOfflinePlayer(team.getOwnerUuid()).getName();
+                    String ownerName = this.plugin.getCacheManager().getPlayerName(team.getOwnerUuid());
+                    return ownerName != null ? ownerName : "Unknown";
                 }
                 case "team_id": {
                     return String.valueOf(team.getId());

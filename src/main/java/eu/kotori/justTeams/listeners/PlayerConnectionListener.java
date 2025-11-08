@@ -24,15 +24,21 @@ implements Listener {
         this.teamManager = plugin.getTeamManager();
     }
 
-    @EventHandler(priority=EventPriority.MONITOR)
+    @EventHandler(priority=EventPriority.HIGHEST)
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
+        this.plugin.getCacheManager().cachePlayerName(player.getUniqueId(), player.getName());
+        if (this.plugin.getConfigManager().isBedrockSupportEnabled() && this.plugin.getBedrockSupport().isBedrockPlayer(player)) {
+            String gamertag = this.plugin.getBedrockSupport().getBedrockGamertag(player);
+            if (gamertag != null && !gamertag.equals(player.getName())) {
+                this.plugin.getCacheManager().cachePlayerName(player.getUniqueId(), gamertag);
+            }
+        }
         this.plugin.getTaskRunner().runAsync(() -> {
             String gamertag;
-            this.plugin.getCacheManager().cachePlayerName(player.getUniqueId(), player.getName());
-            this.plugin.getStorageManager().getStorage().cachePlayerName(player.getUniqueId(), player.getName());
+            String cachedName = this.plugin.getCacheManager().getPlayerName(player.getUniqueId());
+            this.plugin.getStorageManager().getStorage().cachePlayerName(player.getUniqueId(), cachedName != null ? cachedName : player.getName());
             if (this.plugin.getConfigManager().isBedrockSupportEnabled() && this.plugin.getBedrockSupport().isBedrockPlayer(player) && (gamertag = this.plugin.getBedrockSupport().getBedrockGamertag(player)) != null && !gamertag.equals(player.getName())) {
-                this.plugin.getCacheManager().cachePlayerName(player.getUniqueId(), gamertag);
                 this.plugin.getStorageManager().getStorage().cachePlayerName(player.getUniqueId(), gamertag);
                 this.plugin.getLogger().info("Cached Bedrock player: " + player.getName() + " (Gamertag: " + gamertag + ")");
             }

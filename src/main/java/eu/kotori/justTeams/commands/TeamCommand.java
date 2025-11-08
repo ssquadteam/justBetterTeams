@@ -234,10 +234,24 @@ TabCompleter {
                 if (!this.hasAdminPermission(player)) {
                     return false;
                 }
+                Team cached = this.teamManager.getPlayerTeam(player.getUniqueId());
+                if (cached == null) {
+                    this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Loading your team data, please try again.", new TagResolver[0]);
+                    this.teamManager.getPlayerTeamAsync(player.getUniqueId(), t -> {
+                        if (t == null) return;
+                        this.plugin.getLogger().info("=== DEBUG: Team " + t.getName() + " Permissions ===");
+                        for (TeamPlayer member : t.getMembers()) {
+                            this.plugin.getLogger().info("Member: " + String.valueOf(member.getPlayerUuid()) + " - Role: " + String.valueOf((Object)member.getRole()) + " - canUseEnderChest: " + member.canUseEnderChest() + " - canWithdraw: " + member.canWithdraw() + " - canSetHome: " + member.canSetHome() + " - canUseHome: " + member.canUseHome());
+                        }
+                        this.plugin.getLogger().info("=== END DEBUG ===");
+                        this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<green>Team permissions debug info sent to console. Check server logs.", new TagResolver[0]));
+                    });
+                    return true;
+                }
                 this.plugin.getTaskRunner().runAsync(() -> {
                     try {
-                        this.plugin.getLogger().info("=== DEBUG: Team " + this.teamManager.getPlayerTeam(player.getUniqueId()).getName() + " Permissions ===");
-                        for (TeamPlayer member : this.teamManager.getPlayerTeam(player.getUniqueId()).getMembers()) {
+                        this.plugin.getLogger().info("=== DEBUG: Team " + cached.getName() + " Permissions ===");
+                        for (TeamPlayer member : cached.getMembers()) {
                             this.plugin.getLogger().info("Member: " + String.valueOf(member.getPlayerUuid()) + " - Role: " + String.valueOf((Object)member.getRole()) + " - canUseEnderChest: " + member.canUseEnderChest() + " - canWithdraw: " + member.canWithdraw() + " - canSetHome: " + member.canSetHome() + " - canUseHome: " + member.canUseHome());
                         }
                         this.plugin.getLogger().info("=== END DEBUG ===");
@@ -373,12 +387,15 @@ TabCompleter {
     }
 
     private void handleGUI(Player player) {
-        Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
-        if (team == null) {
-            new NoTeamGUI(this.plugin, player).open();
-        } else {
-            new TeamGUI(this.plugin, team, player).open();
-        }
+        this.teamManager.getPlayerTeamAsync(player.getUniqueId(), team -> {
+            this.plugin.getTaskRunner().runOnEntity(player, () -> {
+                if (team == null) {
+                    new NoTeamGUI(this.plugin, player).open();
+                } else {
+                    new TeamGUI(this.plugin, team, player).open();
+                }
+            });
+        });
     }
 
     private void handleCreate(Player player, String[] args) {
@@ -429,7 +446,8 @@ TabCompleter {
         }
         Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
         if (team == null) {
-            this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_not_in_team", new TagResolver[0]);
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Loading your team data, please try again.", new TagResolver[0]);
+            this.teamManager.getPlayerTeamAsync(player.getUniqueId(), t -> {});
             return;
         }
         if (!team.isOwner(player.getUniqueId())) {
@@ -593,8 +611,13 @@ TabCompleter {
             return;
         }
         Team playerTeam = this.teamManager.getPlayerTeam(player.getUniqueId());
+        if (playerTeam == null) {
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Loading your team data, please try again.", new TagResolver[0]);
+            this.teamManager.getPlayerTeamAsync(player.getUniqueId(), t -> {});
+            return;
+        }
         Team targetTeam = this.teamManager.getPlayerTeam(target.getUniqueId());
-        if (playerTeam == null || targetTeam == null || playerTeam.getId() != targetTeam.getId()) {
+        if (targetTeam == null || playerTeam.getId() != targetTeam.getId()) {
             this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_not_in_same_team", new TagResolver[0]);
             return;
         }
@@ -607,7 +630,8 @@ TabCompleter {
         }
         Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
         if (team == null) {
-            this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_not_in_team", new TagResolver[0]);
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Loading your team data, please try again.", new TagResolver[0]);
+            this.teamManager.getPlayerTeamAsync(player.getUniqueId(), t -> {});
             return;
         }
         if (team.isOwner(player.getUniqueId())) {
@@ -669,19 +693,26 @@ TabCompleter {
                 this.plugin.getMessageManager().sendMessage((CommandSender)player, "invalid_team_name", new TagResolver[0]);
                 return;
             }
-            Team team = this.teamManager.getAllTeams().stream().filter(t -> t.getName().equalsIgnoreCase(teamName)).findFirst().orElse(null);
-            if (team == null) {
-                this.plugin.getMessageManager().sendMessage((CommandSender)player, "team_not_found", new TagResolver[0]);
-                return;
-            }
-            this.displayTeamInfo(player, team);
+            this.plugin.getTaskRunner().runAsync(() -> {
+                Team team = this.teamManager.getTeamByName(teamName);
+                this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
+                    if (team == null) {
+                        this.plugin.getMessageManager().sendMessage((CommandSender)player, "team_not_found", new TagResolver[0]);
+                        return;
+                    }
+                    this.displayTeamInfo(player, team);
+                });
+            });
         } else {
-            Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
-            if (team == null) {
-                this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_not_in_team", new TagResolver[0]);
-                return;
-            }
-            this.displayTeamInfo(player, team);
+            this.teamManager.getPlayerTeamAsync(player.getUniqueId(), team -> {
+                this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
+                    if (team == null) {
+                        this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_not_in_team", new TagResolver[0]);
+                        return;
+                    }
+                    this.displayTeamInfo(player, team);
+                });
+            });
         }
     }
 
@@ -725,7 +756,8 @@ TabCompleter {
         }
         Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
         if (team == null) {
-            this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_not_in_team", new TagResolver[0]);
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Loading your team data, please try again.", new TagResolver[0]);
+            this.teamManager.getPlayerTeamAsync(player.getUniqueId(), t -> {});
             return;
         }
         if (!team.hasElevatedPermissions(player.getUniqueId())) {
@@ -744,7 +776,8 @@ TabCompleter {
         }
         Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
         if (team == null) {
-            this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_not_in_team", new TagResolver[0]);
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Loading your team data, please try again.", new TagResolver[0]);
+            this.teamManager.getPlayerTeamAsync(player.getUniqueId(), t -> {});
             return;
         }
         if (!team.hasElevatedPermissions(player.getUniqueId())) {
@@ -764,7 +797,8 @@ TabCompleter {
         }
         Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
         if (team == null) {
-            this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_not_in_team", new TagResolver[0]);
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Loading your team data, please try again.", new TagResolver[0]);
+            this.teamManager.getPlayerTeamAsync(player.getUniqueId(), t -> {});
             return;
         }
         if (!this.plugin.getFeatureRestrictionManager().canAffordAndPay(player, "home")) {
@@ -1303,7 +1337,8 @@ TabCompleter {
         }
         Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
         if (team == null) {
-            this.plugin.getMessageManager().sendMessage((CommandSender)player, "not_in_team", new TagResolver[0]);
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Loading your team data, please try again.", new TagResolver[0]);
+            this.teamManager.getPlayerTeamAsync(player.getUniqueId(), t -> {});
             return;
         }
         if (!team.hasElevatedPermissions(player.getUniqueId())) {

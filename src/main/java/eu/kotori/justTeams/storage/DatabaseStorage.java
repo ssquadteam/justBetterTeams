@@ -70,15 +70,13 @@ implements IDataStorage {
             config.setMaxLifetime(maxLifetime);
             config.setConnectionTimeout(connectionTimeout);
             config.setValidationTimeout(validationTimeout);
-            config.setConnectionTestQuery("/* ping */ SELECT 1");
+            config.setConnectionTestQuery(null);
             config.setInitializationFailTimeout(connectionTimeout);
             config.setIsolateInternalQueries(false);
             config.setAllowPoolSuspension(false);
             config.setReadOnly(false);
             config.setRegisterMbeans(false);
             config.setKeepaliveTime(300000L);
-            config.setMaxLifetime(1800000L);
-            config.setIdleTimeout(600000L);
             if (leakDetectionThreshold > 0L) {
                 config.setLeakDetectionThreshold(leakDetectionThreshold);
             } else if (this.plugin.getConfig().getBoolean("storage.connection_pool.enable_leak_detection", false)) {
@@ -125,10 +123,10 @@ implements IDataStorage {
                 config.setPassword(password);
                 int mysqlConnectionTimeout = this.plugin.getConfig().getInt("storage.mysql.connection_timeout", 30000);
                 config.setConnectionTimeout(mysqlConnectionTimeout);
-                config.setValidationTimeout(5000L);
+                config.setValidationTimeout(validationTimeout);
                 config.setInitializationFailTimeout(mysqlConnectionTimeout);
-                config.setMaximumPoolSize(Math.max(maxPoolSize, 10));
-                config.setMinimumIdle(0);
+                config.setMaximumPoolSize(maxPoolSize);
+                config.setMinimumIdle(minIdle);
                 this.plugin.getLogger().info("MySQL connection configured:");
                 this.plugin.getLogger().info("  Host: " + host + ":" + port);
                 this.plugin.getLogger().info("  Database: " + database);
@@ -502,12 +500,7 @@ implements IDataStorage {
             throw new SQLException("Database connection pool is not available");
         }
         try {
-            Connection conn = this.hikari.getConnection();
-            if (!conn.isValid(3)) {
-                conn.close();
-                throw new SQLException("Connection validation failed");
-            }
-            return conn;
+            return this.hikari.getConnection();
         } catch (SQLException e) {
             this.plugin.getLogger().warning("Failed to get database connection: " + e.getMessage());
             throw e;

@@ -19,6 +19,7 @@ public class CacheManager {
     private final Cache<UUID, String> playerNameCache;
     private final Cache<Integer, List<IDataStorage.TeamWarp>> warpsCache;
     private final Cache<Integer, Map<UUID, IDataStorage.PlayerSession>> teamSessionsCache;
+    private final Cache<String, String> placeholderResultCache;
     private final Map<Integer, Long> lastDatabaseSync = new ConcurrentHashMap<Integer, Long>();
     private final long cacheExpiry;
     private final long syncCooldown;
@@ -33,6 +34,7 @@ public class CacheManager {
         this.playerNameCache = CacheBuilder.newBuilder().maximumSize(10000L).expireAfterWrite(1800L, TimeUnit.SECONDS).build();
         this.warpsCache = CacheBuilder.newBuilder().maximumSize(2000L).expireAfterWrite(this.cacheExpiry, TimeUnit.SECONDS).build();
         this.teamSessionsCache = CacheBuilder.newBuilder().maximumSize(2000L).expireAfterWrite(300L, TimeUnit.SECONDS).build();
+        this.placeholderResultCache = CacheBuilder.newBuilder().maximumSize(1000L).expireAfterWrite(5L, TimeUnit.SECONDS).build();
     }
 
     public List<BlacklistedPlayer> getTeamBlacklist(int teamId) {
@@ -101,6 +103,21 @@ public class CacheManager {
         this.teamSessionsCache.invalidate(teamId);
     }
 
+    public String getCachedPlaceholder(UUID playerUuid, String placeholder) {
+        return this.placeholderResultCache.getIfPresent(playerUuid.toString() + ":" + placeholder.toLowerCase());
+    }
+
+    public void cachePlaceholderResult(UUID playerUuid, String placeholder, String value) {
+        if (value != null) {
+            this.placeholderResultCache.put(playerUuid.toString() + ":" + placeholder.toLowerCase(), value);
+        }
+    }
+
+    public void invalidatePlayerPlaceholders(UUID playerUuid) {
+        String prefix = playerUuid.toString() + ":";
+        this.placeholderResultCache.asMap().keySet().removeIf(k -> k.startsWith(prefix));
+    }
+
     public boolean needsDatabaseSync(int teamId) {
         Long lastSync = this.lastDatabaseSync.get(teamId);
         return lastSync == null || System.currentTimeMillis() - lastSync > this.syncCooldown;
@@ -117,6 +134,7 @@ public class CacheManager {
         this.playerNameCache.cleanUp();
         this.warpsCache.cleanUp();
         this.teamSessionsCache.cleanUp();
+        this.placeholderResultCache.cleanUp();
         long cutoff = System.currentTimeMillis() - this.syncCooldown * 2L;
         this.lastDatabaseSync.entrySet().removeIf(entry -> (Long)entry.getValue() < cutoff);
     }
@@ -128,11 +146,12 @@ public class CacheManager {
         this.playerNameCache.invalidateAll();
         this.warpsCache.invalidateAll();
         this.teamSessionsCache.invalidateAll();
+        this.placeholderResultCache.invalidateAll();
         this.lastDatabaseSync.clear();
     }
 
     public CacheStats getStats() {
-        return new CacheStats(this.blacklistCache.size(), this.joinRequestCache.size(), this.permissionCache.size(), this.playerNameCache.size(), this.warpsCache.size(), this.teamSessionsCache.size(), this.lastDatabaseSync.size());
+        return new CacheStats(this.blacklistCache.size(), this.joinRequestCache.size(), this.permissionCache.size(), this.playerNameCache.size(), this.placeholderResultCache.size(), this.warpsCache.size(), this.teamSessionsCache.size(), this.lastDatabaseSync.size());
     }
 
     public static class CacheStats {
@@ -140,15 +159,17 @@ public class CacheManager {
         public final long joinRequestCacheSize;
         public final long permissionCacheSize;
         public final long playerNameCacheSize;
+        public final long placeholderCacheSize;
         public final long warpsCacheSize;
         public final long teamSessionsCacheSize;
         public final int syncTrackingSize;
 
-        public CacheStats(long blacklistCacheSize, long joinRequestCacheSize, long permissionCacheSize, long playerNameCacheSize, long warpsCacheSize, long teamSessionsCacheSize, int syncTrackingSize) {
+        public CacheStats(long blacklistCacheSize, long joinRequestCacheSize, long permissionCacheSize, long playerNameCacheSize, long placeholderCacheSize, long warpsCacheSize, long teamSessionsCacheSize, int syncTrackingSize) {
             this.blacklistCacheSize = blacklistCacheSize;
             this.joinRequestCacheSize = joinRequestCacheSize;
             this.permissionCacheSize = permissionCacheSize;
             this.playerNameCacheSize = playerNameCacheSize;
+            this.placeholderCacheSize = placeholderCacheSize;
             this.warpsCacheSize = warpsCacheSize;
             this.teamSessionsCacheSize = teamSessionsCacheSize;
             this.syncTrackingSize = syncTrackingSize;

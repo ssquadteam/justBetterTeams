@@ -69,20 +69,21 @@ storage:
   connection_pool:
     # H2 defaults: max_size=4, min_idle=1
     # MySQL defaults: max_size=10, min_idle=3  
-    max_size: 10
+    # NOTE: Lower pool sizes reduce validation overhead; increase only if needed
+    max_size: 8
     min_idle: 3
     
     # Timeouts in milliseconds
-    idle_timeout: 300000          # 5 minutes
+    idle_timeout: 600000          # 10 minutes (reduced churn)
     max_lifetime: 1800000         # 30 minutes
     connection_timeout: 30000     # 30 seconds (match MySQL timeout)
-    validation_timeout: 5000      # 5 seconds
+    validation_timeout: 10000     # 10 seconds (reduce validation frequency)
     
     # Connection testing
     connection_test_query: "SELECT 1"
     
     # Leak detection (0 = disabled, >0 = milliseconds before leak warning)
-    leak_detection_threshold: 0
+    leak_detection_threshold: 60000
 
 # ===================================================================
 #                         Redis Configuration
@@ -248,8 +249,8 @@ settings:
   # For normal servers: 1 second provides the best real-time experience
   sync_optimization:
     heartbeat_interval: 600            # Server heartbeat: 10 minutes (600 seconds)
-    cross_server_sync_interval: 3    
-    critical_sync_interval: 1          # Messages & critical updates: 1 SECOND (ULTRA-FAST)
+    cross_server_sync_interval: 5      # Non-critical syncs: 5s default
+    critical_sync_interval: 3          # Critical updates: 3s (balance performance and freshness)
     max_teams_per_batch: 100
     enable_lazy_loading: true
     team_cache_ttl: 1200
@@ -257,12 +258,14 @@ settings:
     max_sync_retries: 2
     sync_retry_delay: 1000             # Reduced retry delay to 1 second
     max_batch_size: 500
-    cache_cleanup_interval: 900
+    cache_cleanup_interval: 1800       # 30 minutes
     async_database_operations: true
     bulk_operation_batch_size: 200
     connection_validation_interval: 60
     heartbeat_batch_size: 1
     enable_connection_pooling: true
+    # Performance note: Lower intervals mean more real-time updates but higher CPU usage.
+    # For single-server setups (single_server_mode: true), cross-server intervals are ignored.
 
   # Performance Monitoring
   performance:
