@@ -567,28 +567,62 @@ public class TeamManager {
         }
         this.plugin.getTaskRunner().runAsync(() -> {
             Optional<Team> teamOpt = this.storage.findTeamByPlayer(effective);
+            List<TeamPlayer> members = null;
+            List<UUID> joinRequests = null;
+            if (teamOpt.isPresent()) {
+                Team t = teamOpt.get();
+                try {
+                    members = this.storage.getTeamMembers(t.getId());
+                } catch (Exception ignored) {}
+                try {
+                    joinRequests = this.storage.getJoinRequests(t.getId());
+                } catch (Exception ignored) {}
+            }
+            List<TeamPlayer> finalMembers = members;
+            List<UUID> finalJoinRequests = joinRequests;
             this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
                 if (teamOpt.isPresent()) {
-                    Team team = (Team)teamOpt.get();
-                    this.loadTeamIntoCache(team);
+                    Team team = teamOpt.get();
+                    String lowerCaseName = team.getName().toLowerCase();
+                    synchronized (this.cacheLock) {
+                        if (this.teamNameCache.containsKey(lowerCaseName)) {
+                            Team cachedTeam = this.teamNameCache.get(lowerCaseName);
+                            cachedTeam.getMembers().forEach(member -> this.playerTeamCache.put(member.getPlayerUuid(), cachedTeam));
+                        } else {
+                            if (finalMembers != null) {
+                                team.getMembers().clear();
+                                team.getMembers().addAll(finalMembers);
+                            }
+                            if (finalJoinRequests != null) {
+                                team.getJoinRequests().clear();
+                                for (UUID req : finalJoinRequests) {
+                                    team.addJoinRequest(req);
+                                }
+                            }
+                            this.teamNameCache.put(lowerCaseName, team);
+                            team.getMembers().forEach(member -> this.playerTeamCache.put(member.getPlayerUuid(), team));
+                            this.plugin.getLogger().info("Loaded team " + team.getName() + " with " + team.getMembers().size() + " members and " + (finalJoinRequests != null ? finalJoinRequests.size() : 0) + " join requests");
+                        }
+                    }
+                    List<UUID> memberUuids = team.getMembers().stream().map(TeamPlayer::getPlayerUuid).collect(Collectors.toList());
+                    this.resolvePlayerNames(memberUuids, resolved -> {});
                     this.plugin.getTaskRunner().runAsync(() -> {
                         try {
                             if (this.plugin.getCacheManager().needsDatabaseSync(team.getId())) {
                                 try {
                                     List<IDataStorage.TeamWarp> warps = this.storage.getWarps(team.getId());
                                     this.plugin.getCacheManager().cacheTeamWarps(team.getId(), warps);
-                                } catch (Exception ignored) {
-                                }
+                                } catch (Exception ignored) {}
                                 try {
                                     List<BlacklistedPlayer> blacklist = this.storage.getTeamBlacklist(team.getId());
                                     this.plugin.getCacheManager().cacheTeamBlacklist(team.getId(), blacklist);
-                                } catch (Exception ignored) {
-                                }
+                                } catch (Exception ignored) {}
                             }
                         } catch (Exception e) {
                             this.plugin.getLogger().warning("Failed to pre-warm caches for team " + team.getName() + ": " + e.getMessage());
                         }
                     });
+                    // Notify about pending join requests without blocking the main/region thread
                     this.checkPendingJoinRequests(player, team);
                 }
             });
@@ -596,12 +630,36 @@ public class TeamManager {
     }
 
     private void checkPendingJoinRequests(Player player, Team team) {
-        List<UUID> requests;
-        if (team.hasElevatedPermissions(player.getUniqueId()) && !(requests = this.storage.getJoinRequests(team.getId())).isEmpty()) {
-            this.plugin.getLogger().info("Player " + player.getName() + " has " + requests.size() + " pending join requests");
-            this.messageManager.sendMessage((CommandSender)player, "join_request_count", new TagResolver[]{Placeholder.unparsed((String)"count", (String)String.valueOf(requests.size()))});
-            this.messageManager.sendMessage((CommandSender)player, "join_request_notification", new TagResolver[]{Placeholder.unparsed((String)"player", (String)"a player")});
+        if (!team.hasElevatedPermissions(player.getUniqueId())) {
+            return;
         }
+        // Use cached requests if available to avoid DB on the main/region thread
+        List<UUID> cached = team.getJoinRequests();
+        if (cached != null && !cached.isEmpty()) {
+            this.plugin.getLogger().info("Player " + player.getName() + " has " + cached.size() + " pending join requests");
+            this.messageManager.sendMessage((CommandSender)player, "join_request_count", new TagResolver[]{Placeholder.unparsed((String)"count", (String)String.valueOf(cached.size()))});
+            this.messageManager.sendMessage((CommandSender)player, "join_request_notification", new TagResolver[]{Placeholder.unparsed((String)"player", (String)"a player")});
+            return;
+        }
+        // Fallback: check asynchronously and then notify the player on their entity thread
+        this.plugin.getTaskRunner().runAsync(() -> {
+            try {
+                List<UUID> requests = this.storage.getJoinRequests(team.getId());
+                if (!requests.isEmpty()) {
+                    synchronized (this.cacheLock) {
+                        team.getJoinRequests().clear();
+                        for (UUID req : requests) {
+                            team.addJoinRequest(req);
+                        }
+                    }
+                    this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
+                        this.plugin.getLogger().info("Player " + player.getName() + " has " + requests.size() + " pending join requests");
+                        this.messageManager.sendMessage((CommandSender)player, "join_request_count", new TagResolver[]{Placeholder.unparsed((String)"count", (String)String.valueOf(requests.size()))});
+                        this.messageManager.sendMessage((CommandSender)player, "join_request_notification", new TagResolver[]{Placeholder.unparsed((String)"player", (String)"a player")});
+                    });
+                }
+            } catch (Exception ignored) {}
+        });
     }
 
     public String validateTeamName(String name) {
@@ -841,53 +899,69 @@ public class TeamManager {
         }
         this.plugin.getTaskRunner().runAsync(() -> {
             Team team = this.getTeamByName(teamName);
-            this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
-                if (team == null) {
+            if (team == null) {
+                this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
                     this.messageManager.sendMessage((CommandSender)player, "team_not_found", new TagResolver[0]);
                     EffectsUtil.playSound(player, EffectsUtil.SoundType.ERROR);
-                    return;
-                }
-                if (team.getMembers().size() >= this.configManager.getMaxTeamSize()) {
+                });
+                return;
+            }
+            if (team.getMembers().size() >= this.configManager.getMaxTeamSize()) {
+                this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
                     this.messageManager.sendMessage((CommandSender)player, "team_is_full", new TagResolver[0]);
                     EffectsUtil.playSound(player, EffectsUtil.SoundType.ERROR);
-                    return;
-                }
-                try {
-                    if (this.storage.isPlayerBlacklisted(team.getId(), player.getUniqueId())) {
-                        List<BlacklistedPlayer> blacklist = this.storage.getTeamBlacklist(team.getId());
-                        BlacklistedPlayer blacklistedPlayer = blacklist.stream().filter(bp -> bp != null && bp.getPlayerUuid() != null && bp.getPlayerUuid().equals(player.getUniqueId())).findFirst().orElse(null);
-                        String blacklisterName = blacklistedPlayer != null ? blacklistedPlayer.getBlacklistedByName() : "Unknown";
-                        this.messageManager.sendMessage((CommandSender)player, "player_is_blacklisted", new TagResolver[]{Placeholder.unparsed((String)"target", (String)player.getName()), Placeholder.unparsed((String)"blacklister", (String)blacklisterName)});
-                        EffectsUtil.playSound(player, EffectsUtil.SoundType.ERROR);
-                        return;
-                    }
-                } catch (Exception e) {
-                    this.plugin.getLogger().warning("Could not check blacklist status for player " + player.getName() + " accepting invite to team " + team.getName() + ": " + e.getMessage());
-                }
-                invites.remove(teamName.toLowerCase());
-                if (invites.isEmpty()) {
-                    this.teamInvites.invalidate(player.getUniqueId());
-                }
-                this.plugin.getTaskRunner().runAsync(() -> {
-                    this.storage.addMemberToTeam(team.getId(), player.getUniqueId());
-                    this.storage.clearAllJoinRequests(player.getUniqueId());
-                    this.publishCrossServerUpdate(team.getId(), "MEMBER_JOINED", player.getUniqueId().toString(), player.getName());
-                    this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
-                        team.addMember(new TeamPlayer(player.getUniqueId(), TeamRole.MEMBER, Instant.now(), false, true, false, true));
-                        UUID effective = this.getEffectiveUuid(player.getUniqueId());
-                        this.playerTeamCache.put(effective, team);
-                        this.plugin.getCacheManager().invalidatePlayerPlaceholders(player.getUniqueId());
-                        this.invalidateTeamPlaceholders(team);
-                        this.plugin.getTaskRunner().runAsync(() -> {
-                            Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
-                            this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
-                        });
-                        this.messageManager.sendMessage((CommandSender)player, "invite_accepted", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
-                        team.broadcast("invite_accepted_broadcast", new TagResolver[]{Placeholder.unparsed((String)"player", (String)player.getName())});
-                        EffectsUtil.playSound(player, EffectsUtil.SoundType.SUCCESS);
-                        this.plugin.getWebhookHelper().sendPlayerJoinWebhook(player, team);
-                    });
                 });
+                return;
+            }
+            boolean isBlacklisted = false;
+            String blacklisterName = "Unknown";
+            try {
+                if (this.storage.isPlayerBlacklisted(team.getId(), player.getUniqueId())) {
+                    isBlacklisted = true;
+                    try {
+                        List<BlacklistedPlayer> blacklist = this.storage.getTeamBlacklist(team.getId());
+                        BlacklistedPlayer bp = blacklist.stream().filter(b -> b != null && player.getUniqueId().equals(b.getPlayerUuid())).findFirst().orElse(null);
+                        if (bp != null && bp.getBlacklistedByName() != null) {
+                            blacklisterName = bp.getBlacklistedByName();
+                        }
+                    } catch (Exception ignored) {}
+                }
+            } catch (Exception e) {
+                this.plugin.getLogger().warning("Could not check blacklist status for player " + player.getName() + " accepting invite to team " + team.getName() + ": " + e.getMessage());
+            }
+            if (isBlacklisted) {
+                final String finalBlacklisterName = blacklisterName;
+                this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
+                    this.messageManager.sendMessage((CommandSender)player, "player_is_blacklisted", new TagResolver[]{Placeholder.unparsed((String)"target", (String)player.getName()), Placeholder.unparsed((String)"blacklister", (String)finalBlacklisterName)});
+                    EffectsUtil.playSound(player, EffectsUtil.SoundType.ERROR);
+                });
+                return;
+            }
+            invites.remove(teamName.toLowerCase());
+            if (invites.isEmpty()) {
+                this.teamInvites.invalidate(player.getUniqueId());
+            }
+            try {
+                this.storage.addMemberToTeam(team.getId(), player.getUniqueId());
+                this.storage.clearAllJoinRequests(player.getUniqueId());
+                this.publishCrossServerUpdate(team.getId(), "MEMBER_JOINED", player.getUniqueId().toString(), player.getName());
+            } catch (Exception e) {
+                this.plugin.getLogger().warning("Failed to accept invite in DB: " + e.getMessage());
+            }
+            this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
+                team.addMember(new TeamPlayer(player.getUniqueId(), TeamRole.MEMBER, Instant.now(), false, true, false, true));
+                UUID effective = this.getEffectiveUuid(player.getUniqueId());
+                this.playerTeamCache.put(effective, team);
+                this.plugin.getCacheManager().invalidatePlayerPlaceholders(player.getUniqueId());
+                this.invalidateTeamPlaceholders(team);
+                this.plugin.getTaskRunner().runAsync(() -> {
+                    Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
+                    this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
+                });
+                this.messageManager.sendMessage((CommandSender)player, "invite_accepted", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
+                team.broadcast("invite_accepted_broadcast", new TagResolver[]{Placeholder.unparsed((String)"player", (String)player.getName())});
+                EffectsUtil.playSound(player, EffectsUtil.SoundType.SUCCESS);
+                this.plugin.getWebhookHelper().sendPlayerJoinWebhook(player, team);
             });
         });
     }
@@ -1991,28 +2065,36 @@ public class TeamManager {
     }
 
     private void handlePublicTeamJoin(Player player, Team team) {
-        try {
-            this.storage.addMemberToTeam(team.getId(), player.getUniqueId());
-            this.storage.clearAllJoinRequests(player.getUniqueId());
-            this.publishCrossServerUpdate(team.getId(), "MEMBER_JOINED", player.getUniqueId().toString(), player.getName());
-            TeamPlayer newMember = new TeamPlayer(player.getUniqueId(), TeamRole.MEMBER, Instant.now(), false, true, false, true);
-            team.addMember(newMember);
-            this.playerTeamCache.put(player.getUniqueId(), team);
-            this.plugin.getCacheManager().invalidateTeamSessions(team.getId());
-            this.plugin.getTaskRunner().runAsync(() -> {
-                Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
-                this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
+        this.plugin.getTaskRunner().runAsync(() -> {
+            try {
+                this.storage.addMemberToTeam(team.getId(), player.getUniqueId());
+                this.storage.clearAllJoinRequests(player.getUniqueId());
+                this.publishCrossServerUpdate(team.getId(), "MEMBER_JOINED", player.getUniqueId().toString(), player.getName());
+            } catch (Exception e) {
+                this.plugin.getLogger().severe("Error handling public team join in DB for " + player.getName() + ": " + e.getMessage());
+                this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
+                    this.messageManager.sendMessage((CommandSender)player, "team_join_error", new TagResolver[0]);
+                    EffectsUtil.playSound(player, EffectsUtil.SoundType.ERROR);
+                });
+                return;
+            }
+            // Update caches and notify on the entity thread
+            this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
+                TeamPlayer newMember = new TeamPlayer(player.getUniqueId(), TeamRole.MEMBER, Instant.now(), false, true, false, true);
+                team.addMember(newMember);
+                this.playerTeamCache.put(player.getUniqueId(), team);
+                this.plugin.getCacheManager().invalidateTeamSessions(team.getId());
+                this.plugin.getTaskRunner().runAsync(() -> {
+                    Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
+                    this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
+                });
+                this.refreshTeamMembers(team);
+                this.messageManager.sendMessage((CommandSender)player, "player_joined_public_team", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
+                team.broadcast("player_joined_team", new TagResolver[]{Placeholder.unparsed((String)"player", (String)player.getName())});
+                EffectsUtil.playSound(player, EffectsUtil.SoundType.SUCCESS);
+                this.plugin.getWebhookHelper().sendPlayerJoinWebhook(player, team);
             });
-            this.refreshTeamMembers(team);
-            this.messageManager.sendMessage((CommandSender)player, "player_joined_public_team", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
-            team.broadcast("player_joined_team", new TagResolver[]{Placeholder.unparsed((String)"player", (String)player.getName())});
-            EffectsUtil.playSound(player, EffectsUtil.SoundType.SUCCESS);
-            this.plugin.getWebhookHelper().sendPlayerJoinWebhook(player, team);
-        } catch (Exception e) {
-            this.plugin.getLogger().severe("Error handling public team join for " + player.getName() + ": " + e.getMessage());
-            this.messageManager.sendMessage((CommandSender)player, "team_join_error", new TagResolver[0]);
-            EffectsUtil.playSound(player, EffectsUtil.SoundType.ERROR);
-        }
+        });
     }
 
     public void resolvePlayerName(UUID playerUuid, Consumer<String> callback) {
@@ -2099,20 +2181,24 @@ public class TeamManager {
     public void withdrawJoinRequest(Player player, String teamName) {
         this.plugin.getTaskRunner().runAsync(() -> {
             Optional<Team> teamOpt = this.storage.findTeamByName(teamName);
-            this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
-                if (teamOpt.isEmpty()) {
-                    this.messageManager.sendMessage((CommandSender)player, "team_not_found", new TagResolver[0]);
-                    return;
-                }
-                Team team = (Team)teamOpt.get();
-                if (this.storage.hasJoinRequest(team.getId(), player.getUniqueId())) {
+            if (teamOpt.isEmpty()) {
+                this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> this.messageManager.sendMessage((CommandSender)player, "team_not_found", new TagResolver[0]));
+                return;
+            }
+            Team team = teamOpt.get();
+            boolean hadRequest = false;
+            try {
+                hadRequest = this.storage.hasJoinRequest(team.getId(), player.getUniqueId());
+                if (hadRequest) {
                     this.storage.removeJoinRequest(team.getId(), player.getUniqueId());
-                    team.removeJoinRequest(player.getUniqueId());
-                    this.messageManager.sendMessage((CommandSender)player, "join_request_withdrawn", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
-                } else {
-                    this.messageManager.sendMessage((CommandSender)player, "join_request_not_found", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
                 }
-            });
+            } catch (Exception ignored) {}
+            if (hadRequest) {
+                team.removeJoinRequest(player.getUniqueId());
+                this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> this.messageManager.sendMessage((CommandSender)player, "join_request_withdrawn", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())}));
+            } else {
+                this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> this.messageManager.sendMessage((CommandSender)player, "join_request_not_found", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())}));
+            }
         });
     }
 
@@ -2136,45 +2222,61 @@ public class TeamManager {
             }
             return;
         }
-        try {
-            if (this.storage.isPlayerBlacklisted(team.getId(), targetUuid)) {
+        this.plugin.getTaskRunner().runAsync(() -> {
+            boolean blocked = false;
+            try {
+                blocked = this.storage.isPlayerBlacklisted(team.getId(), targetUuid);
+            } catch (Exception e) {
+                this.plugin.getLogger().warning("Could not check blacklist status for player " + String.valueOf(targetUuid) + " accepting join request to team " + team.getName() + ": " + e.getMessage());
+            }
+            if (blocked) {
                 if (target != null) {
-                    this.messageManager.sendMessage((CommandSender)target, "player_is_blacklisted", new TagResolver[]{Placeholder.unparsed((String)"target", (String)target.getName())});
+                    this.plugin.getTaskRunner().runOnEntity((Entity)target, () -> this.messageManager.sendMessage((CommandSender)target, "player_is_blacklisted", new TagResolver[]{Placeholder.unparsed((String)"target", (String)target.getName())}));
                 }
                 return;
             }
-        } catch (Exception e) {
-            this.plugin.getLogger().warning("Could not check blacklist status for player " + String.valueOf(targetUuid) + " accepting join request to team " + team.getName() + ": " + e.getMessage());
-        }
-        this.storage.removeJoinRequest(team.getId(), targetUuid);
-        team.removeJoinRequest(targetUuid);
-        this.storage.addMemberToTeam(team.getId(), targetUuid);
-        TeamPlayer newMember = new TeamPlayer(targetUuid, TeamRole.MEMBER, Instant.now(), false, true, false, true);
-        team.addMember(newMember);
-        this.playerTeamCache.put(targetUuid, team);
-        this.plugin.getCacheManager().invalidateTeamSessions(team.getId());
-        this.plugin.getTaskRunner().runAsync(() -> {
-            Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
-            this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
+            try {
+                this.storage.removeJoinRequest(team.getId(), targetUuid);
+                this.storage.addMemberToTeam(team.getId(), targetUuid);
+            } catch (Exception e) {
+                this.plugin.getLogger().warning("Failed to accept join request in DB: " + e.getMessage());
+            }
+            team.removeJoinRequest(targetUuid);
+            TeamPlayer newMember = new TeamPlayer(targetUuid, TeamRole.MEMBER, Instant.now(), false, true, false, true);
+            team.addMember(newMember);
+            this.playerTeamCache.put(targetUuid, team);
+            this.plugin.getCacheManager().invalidateTeamSessions(team.getId());
+            this.plugin.getTaskRunner().runAsync(() -> {
+                Map<UUID, IDataStorage.PlayerSession> sessions = this.storage.getTeamPlayerSessions(team.getId());
+                this.plugin.getCacheManager().cacheTeamSessions(team.getId(), sessions);
+            });
+            team.broadcast("player_joined_team", new TagResolver[]{Placeholder.unparsed((String)"player", (String)(target != null ? target.getName() : "Unknown Player"))});
+            if (target != null) {
+                this.plugin.getTaskRunner().runOnEntity((Entity)target, () -> {
+                    this.messageManager.sendMessage((CommandSender)target, "joined_team", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
+                    EffectsUtil.playSound(target, EffectsUtil.SoundType.SUCCESS);
+                });
+            }
+            this.forceTeamSync(team.getId());
+            this.sendCrossServerTeamUpdate(team.getId(), "MEMBER_ADDED", targetUuid);
+            this.refreshAllTeamMemberGUIs(team);
         });
-        team.broadcast("player_joined_team", new TagResolver[]{Placeholder.unparsed((String)"player", (String)(target != null ? target.getName() : "Unknown Player"))});
-        if (target != null) {
-            this.messageManager.sendMessage((CommandSender)target, "joined_team", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
-            EffectsUtil.playSound(target, EffectsUtil.SoundType.SUCCESS);
-        }
-        this.forceTeamSync(team.getId());
-        this.sendCrossServerTeamUpdate(team.getId(), "MEMBER_ADDED", targetUuid);
-        this.refreshAllTeamMemberGUIs(team);
     }
 
     public void denyJoinRequest(Team team, UUID targetUuid) {
-        this.storage.removeJoinRequest(team.getId(), targetUuid);
-        team.removeJoinRequest(targetUuid);
-        OfflinePlayer target = Bukkit.getOfflinePlayer((UUID)targetUuid);
-        team.broadcast("request_denied_team", new TagResolver[]{Placeholder.unparsed((String)"player", (String)(target.getName() != null ? target.getName() : "A player"))});
-        if (target.isOnline()) {
-            this.messageManager.sendMessage((CommandSender)target.getPlayer(), "request_denied_player", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
-        }
+        this.plugin.getTaskRunner().runAsync(() -> {
+            try {
+                this.storage.removeJoinRequest(team.getId(), targetUuid);
+            } catch (Exception e) {
+                this.plugin.getLogger().warning("Failed to remove join request in DB: " + e.getMessage());
+            }
+            team.removeJoinRequest(targetUuid);
+            OfflinePlayer target = Bukkit.getOfflinePlayer((UUID)targetUuid);
+            team.broadcast("request_denied_team", new TagResolver[]{Placeholder.unparsed((String)"player", (String)(target.getName() != null ? target.getName() : "A player"))});
+            if (target.isOnline()) {
+                this.messageManager.sendMessage((CommandSender)target.getPlayer(), "request_denied_player", new TagResolver[]{Placeholder.unparsed((String)"team", (String)team.getName())});
+            }
+        });
     }
 
     private String locationToString(Location location) {
@@ -2395,22 +2497,20 @@ public class TeamManager {
                 for (int i = 0; i < teamNamesList.size(); i += maxBatchSize) {
                     int endIndex = Math.min(i + maxBatchSize, teamNamesList.size());
                     List<String> batch = teamNamesList.subList(i, endIndex);
-                    this.plugin.getTaskRunner().runAsync(() -> {
-                        for (String teamName : batch) {
-                            try {
-                                Optional<Team> dbTeam = this.storage.findTeamByName(teamName);
-                                if (!dbTeam.isPresent()) continue;
-                                synchronized (this.cacheLock) {
-                                    Team cachedTeam = this.teamNameCache.get(teamName);
-                                    if (cachedTeam != null) {
-                                        this.syncTeamDataAsync(cachedTeam, dbTeam.get());
-                                    }
+                    for (String teamName : batch) {
+                        try {
+                            Optional<Team> dbTeam = this.storage.findTeamByName(teamName);
+                            if (!dbTeam.isPresent()) continue;
+                            synchronized (this.cacheLock) {
+                                Team cachedTeam = this.teamNameCache.get(teamName);
+                                if (cachedTeam != null) {
+                                    this.syncTeamDataAsync(cachedTeam, dbTeam.get());
                                 }
-                            } catch (Exception e) {
-                                this.plugin.getLogger().warning("Error syncing team " + teamName + ": " + e.getMessage());
                             }
+                        } catch (Exception e) {
+                            this.plugin.getLogger().warning("Error syncing team " + teamName + ": " + e.getMessage());
                         }
-                    });
+                    }
                     if (endIndex >= teamNamesList.size()) continue;
                     try {
                         Thread.sleep(20L);

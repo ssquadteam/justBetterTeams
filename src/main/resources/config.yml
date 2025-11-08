@@ -78,7 +78,7 @@ storage:
     max_lifetime: 1800000         # 30 minutes
     connection_timeout: 30000     # 30 seconds (match MySQL timeout)
     validation_timeout: 10000     # 10 seconds (reduce validation frequency)
-    
+    keepalive_time: 0
     # Connection testing
     connection_test_query: "SELECT 1"
     

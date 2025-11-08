@@ -76,7 +76,8 @@ implements IDataStorage {
             config.setAllowPoolSuspension(false);
             config.setReadOnly(false);
             config.setRegisterMbeans(false);
-            config.setKeepaliveTime(300000L);
+            long keepaliveTime = this.plugin.getConfig().getLong("storage.connection_pool.keepalive_time", 0L);
+            config.setKeepaliveTime(keepaliveTime);
             if (leakDetectionThreshold > 0L) {
                 config.setLeakDetectionThreshold(leakDetectionThreshold);
             } else if (this.plugin.getConfig().getBoolean("storage.connection_pool.enable_leak_detection", false)) {
