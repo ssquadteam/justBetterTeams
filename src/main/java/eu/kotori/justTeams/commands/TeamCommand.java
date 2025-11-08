@@ -403,6 +403,10 @@ TabCompleter {
         if (!this.checkFeatureEnabled(player, "team_creation")) {
             return;
         }
+        if (this.teamManager.isPlayerLoading(player.getUniqueId())) {
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Team loading, retry in 2s.", new TagResolver[0]);
+            return;
+        }
         boolean tagEnabled = this.plugin.getConfigManager().isTeamTagEnabled();
         if (tagEnabled && args.length < 3) {
             this.plugin.getMessageManager().sendMessage((CommandSender)player, "usage_create", new TagResolver[0]);
@@ -433,32 +437,38 @@ TabCompleter {
                 return;
             }
         }
-        if (this.teamManager.getPlayerTeam(player.getUniqueId()) != null) {
-            this.plugin.getMessageManager().sendMessage((CommandSender)player, "already_in_team", new TagResolver[0]);
-            return;
-        }
-        this.teamManager.createTeam(player, teamName, teamTag);
+        this.teamManager.requireTeamStateAsync(player, hasTeam -> {
+            if (hasTeam) {
+                this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> this.plugin.getMessageManager().sendMessage((CommandSender)player, "already_in_team", new TagResolver[0]));
+                return;
+            }
+            this.teamManager.createTeam(player, teamName, teamTag);
+        });
     }
 
     private void handleDisband(Player player) {
         if (!this.checkFeatureEnabled(player, "team_disband")) {
             return;
         }
-        Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
-        if (team == null) {
-            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Loading your team data, please try again.", new TagResolver[0]);
-            this.teamManager.getPlayerTeamAsync(player.getUniqueId(), t -> {});
+        if (this.teamManager.isPlayerLoading(player.getUniqueId())) {
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Team loading, retry in 2s.", new TagResolver[0]);
             return;
         }
-        if (!team.isOwner(player.getUniqueId())) {
-            this.plugin.getMessageManager().sendMessage((CommandSender)player, "must_be_owner", new TagResolver[0]);
-            return;
-        }
-        this.teamManager.disbandTeam(player);
+        this.teamManager.requireOwnershipAsync(player, isOwner -> {
+            if (!isOwner) {
+                this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> this.plugin.getMessageManager().sendMessage((CommandSender)player, "must_be_owner", new TagResolver[0]));
+                return;
+            }
+            this.teamManager.disbandTeam(player);
+        });
     }
 
     private void handleInvite(Player player, String[] args) {
         if (!this.checkFeatureEnabled(player, "team_invites")) {
+            return;
+        }
+        if (this.teamManager.isPlayerLoading(player.getUniqueId())) {
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Team loading, retry in 2s.", new TagResolver[0]);
             return;
         }
         if (args.length < 2) {
@@ -476,11 +486,24 @@ TabCompleter {
         }
         Player target = Bukkit.getPlayer((String)targetName);
         if (target != null && target.isOnline()) {
-            if (this.teamManager.getPlayerTeam(target.getUniqueId()) != null) {
-                this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_already_in_team", new TagResolver[]{Placeholder.unparsed((String)"target", (String)target.getName())});
-                return;
-            }
-            this.teamManager.invitePlayer(player, target);
+            // Ensure sender has a team and permissions before proceeding
+            this.teamManager.requireTeamAsync(player, team -> {
+                this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
+                    if (team == null) {
+                        this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Team loading, retry in 2s.", new TagResolver[0]);
+                        return;
+                    }
+                    if (this.teamManager.getPlayerTeam(target.getUniqueId()) != null) {
+                        this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_already_in_team", new TagResolver[]{Placeholder.unparsed((String)"target", (String)target.getName())});
+                        return;
+                    }
+                    if (!team.hasElevatedPermissions(player.getUniqueId())) {
+                        this.plugin.getMessageManager().sendMessage((CommandSender)player, "must_be_owner_or_co_owner", new TagResolver[0]);
+                        return;
+                    }
+                    this.teamManager.invitePlayer(player, target);
+                });
+            });
             return;
         }
         this.plugin.getTaskRunner().runAsync(() -> {
@@ -592,6 +615,10 @@ TabCompleter {
         if (!this.checkFeatureEnabled(player, "member_kick")) {
             return;
         }
+        if (this.teamManager.isPlayerLoading(player.getUniqueId())) {
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Team loading, retry in 2s.", new TagResolver[0]);
+            return;
+        }
         if (args.length < 2) {
             this.plugin.getMessageManager().sendMessage((CommandSender)player, "usage_kick", new TagResolver[0]);
             return;
@@ -610,39 +637,51 @@ TabCompleter {
             this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_not_found", new TagResolver[]{Placeholder.unparsed((String)"target", (String)targetName)});
             return;
         }
-        Team playerTeam = this.teamManager.getPlayerTeam(player.getUniqueId());
-        if (playerTeam == null) {
-            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Loading your team data, please try again.", new TagResolver[0]);
-            this.teamManager.getPlayerTeamAsync(player.getUniqueId(), t -> {});
-            return;
-        }
-        Team targetTeam = this.teamManager.getPlayerTeam(target.getUniqueId());
-        if (targetTeam == null || playerTeam.getId() != targetTeam.getId()) {
-            this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_not_in_same_team", new TagResolver[0]);
-            return;
-        }
-        this.teamManager.kickPlayer(player, target.getUniqueId());
+        this.teamManager.requireTeamAsync(player, senderTeam -> {
+            this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
+                if (senderTeam == null) {
+                    this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Team loading, retry in 2s.", new TagResolver[0]);
+                    return;
+                }
+                Team targetTeam = this.teamManager.getPlayerTeam(target.getUniqueId());
+                if (targetTeam == null || senderTeam.getId() != targetTeam.getId()) {
+                    this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_not_in_same_team", new TagResolver[0]);
+                    return;
+                }
+                this.teamManager.kickPlayer(player, target.getUniqueId());
+            });
+        });
     }
 
     private void handleLeave(Player player) {
         if (!this.checkFeatureEnabled(player, "member_leave")) {
             return;
         }
-        Team team = this.teamManager.getPlayerTeam(player.getUniqueId());
-        if (team == null) {
-            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Loading your team data, please try again.", new TagResolver[0]);
-            this.teamManager.getPlayerTeamAsync(player.getUniqueId(), t -> {});
+        if (this.teamManager.isPlayerLoading(player.getUniqueId())) {
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Team loading, retry in 2s.", new TagResolver[0]);
             return;
         }
-        if (team.isOwner(player.getUniqueId())) {
-            this.plugin.getMessageManager().sendMessage((CommandSender)player, "owner_cannot_leave", new TagResolver[0]);
-            return;
-        }
-        this.teamManager.leaveTeam(player);
+        this.teamManager.requireTeamAsync(player, team -> {
+            this.plugin.getTaskRunner().runOnEntity((Entity)player, () -> {
+                if (team == null) {
+                    this.plugin.getMessageManager().sendMessage((CommandSender)player, "player_not_in_team", new TagResolver[0]);
+                    return;
+                }
+                if (team.isOwner(player.getUniqueId())) {
+                    this.plugin.getMessageManager().sendMessage((CommandSender)player, "owner_cannot_leave", new TagResolver[0]);
+                    return;
+                }
+                this.teamManager.leaveTeam(player);
+            });
+        });
     }
 
     private void handlePromote(Player player, String[] args) {
         if (!this.checkFeatureEnabled(player, "member_promote")) {
+            return;
+        }
+        if (this.teamManager.isPlayerLoading(player.getUniqueId())) {
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Team loading, retry in 2s.", new TagResolver[0]);
             return;
         }
         if (args.length < 2) {
@@ -664,6 +703,10 @@ TabCompleter {
 
     private void handleDemote(Player player, String[] args) {
         if (!this.checkFeatureEnabled(player, "member_demote")) {
+            return;
+        }
+        if (this.teamManager.isPlayerLoading(player.getUniqueId())) {
+            this.plugin.getMessageManager().sendRawMessage((CommandSender)player, "<yellow>Team loading, retry in 2s.", new TagResolver[0]);
             return;
         }
         if (args.length < 2) {

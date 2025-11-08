@@ -56,6 +56,7 @@ implements Listener {
         }
         this.teamManager.handlePendingTeleport(player);
         this.teamManager.loadPlayerTeam(player);
+        this.teamManager.markPlayerLoading(player.getUniqueId(), 1000L);
         this.plugin.getTaskRunner().runAsyncTaskLater(() -> {
             List<Team> pendingInvites = this.teamManager.getPendingInvites(player.getUniqueId());
             if (!pendingInvites.isEmpty()) {

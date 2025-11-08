@@ -70,8 +70,10 @@ public class TeamManager {
     private final AtomicBoolean syncInProgress = new AtomicBoolean(false);
     private final ConcurrentHashMap<Integer, Long> lastSyncTimes = new ConcurrentHashMap();
     private static final long SYNC_COOLDOWN = 5000L;
+    private static final long TEAM_STATE_TIMEOUT_TICKS = 40L; // ~2s
     private final List<IDataStorage.CrossServerUpdate> pendingCrossServerUpdates = new CopyOnWriteArrayList<IDataStorage.CrossServerUpdate>();
     private final Object crossServerUpdateLock = new Object();
+    private final Map<UUID, Long> loadingPlayersUntil = new ConcurrentHashMap<>();
 
     /*
      * WARNING - Removed try catching itself - possible behaviour change.
@@ -389,6 +391,77 @@ public class TeamManager {
     public Team getPlayerTeam(UUID playerUuid) {
         UUID effectiveUuid = this.getEffectiveUuid(playerUuid);
         return this.playerTeamCache.get(effectiveUuid);
+    }
+
+    public void requireTeamAsync(Player player, Consumer<Team> callback) {
+        this.requireTeamAsync(player, TEAM_STATE_TIMEOUT_TICKS, callback);
+    }
+
+    public void requireTeamAsync(Player player, long timeoutTicks, Consumer<Team> callback) {
+        UUID raw = player.getUniqueId();
+        Team cached = this.getPlayerTeam(raw);
+        if (cached != null) {
+            this.plugin.getTaskRunner().run(() -> callback.accept(cached));
+            return;
+        }
+        AtomicBoolean completed = new AtomicBoolean(false);
+        UUID effective = this.getEffectiveUuid(raw);
+        this.plugin.getTaskRunner().runAsync(() -> {
+            Optional<Team> dbTeam = this.storage.findTeamByPlayer(effective);
+            Team result = null;
+            if (dbTeam.isPresent()) {
+                Team team = dbTeam.get();
+                this.loadTeamIntoCache(team);
+                result = team;
+            }
+            Team finalResult = result;
+            if (completed.compareAndSet(false, true)) {
+                this.plugin.getTaskRunner().run(() -> callback.accept(finalResult));
+            }
+        });
+        this.plugin.getTaskRunner().runTaskLater(() -> {
+            if (completed.compareAndSet(false, true)) {
+                Team fallback = this.getPlayerTeam(raw);
+                callback.accept(fallback);
+            }
+        }, timeoutTicks);
+    }
+
+    public void requireTeamStateAsync(Player player, Consumer<Boolean> hasTeamCallback) {
+        this.requireTeamStateAsync(player, TEAM_STATE_TIMEOUT_TICKS, hasTeamCallback);
+    }
+
+    public void requireTeamStateAsync(Player player, long timeoutTicks, Consumer<Boolean> hasTeamCallback) {
+        this.requireTeamAsync(player, timeoutTicks, team -> hasTeamCallback.accept(team != null));
+    }
+
+    public void requireOwnershipAsync(Player player, Consumer<Boolean> isOwnerCallback) {
+        this.requireOwnershipAsync(player, TEAM_STATE_TIMEOUT_TICKS, isOwnerCallback);
+    }
+
+    public void requireOwnershipAsync(Player player, long timeoutTicks, Consumer<Boolean> isOwnerCallback) {
+        this.requireTeamAsync(player, timeoutTicks, team -> {
+            if (team == null) {
+                isOwnerCallback.accept(false);
+                return;
+            }
+            UUID effective = this.getEffectiveUuid(player.getUniqueId());
+            isOwnerCallback.accept(team.isOwner(effective));
+        });
+    }
+
+    public void markPlayerLoading(UUID playerUuid, long millis) {
+        this.loadingPlayersUntil.put(playerUuid, System.currentTimeMillis() + millis);
+    }
+
+    public boolean isPlayerLoading(UUID playerUuid) {
+        Long until = this.loadingPlayersUntil.get(playerUuid);
+        if (until == null) return false;
+        if (System.currentTimeMillis() > until) {
+            this.loadingPlayersUntil.remove(playerUuid);
+            return false;
+        }
+        return true;
     }
 
     /**
