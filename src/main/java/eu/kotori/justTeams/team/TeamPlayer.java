@@ -19,6 +19,8 @@ public class TeamPlayer {
     private volatile boolean canKickMembers;
     private volatile boolean canPromoteMembers;
     private volatile boolean canDemoteMembers;
+    private volatile boolean permissionsDirty;
+    private volatile long permissionsVersion;
 
     public TeamPlayer(UUID playerUuid, TeamRole role, Instant joinDate, boolean canWithdraw, boolean canUseEnderChest, boolean canSetHome, boolean canUseHome) {
         this.playerUuid = playerUuid;
@@ -29,6 +31,8 @@ public class TeamPlayer {
         this.canSetHome = canSetHome;
         this.canUseHome = canUseHome;
         this.setDefaultEditingPermissions();
+        this.permissionsDirty = false;
+        this.permissionsVersion = 0L;
     }
 
     public TeamPlayer(UUID playerUuid, TeamRole role, Instant joinDate, boolean canWithdraw, boolean canUseEnderChest, boolean canSetHome, boolean canUseHome, boolean canEditMembers, boolean canEditCoOwners, boolean canKickMembers, boolean canPromoteMembers, boolean canDemoteMembers) {
@@ -44,6 +48,8 @@ public class TeamPlayer {
         this.canKickMembers = canKickMembers;
         this.canPromoteMembers = canPromoteMembers;
         this.canDemoteMembers = canDemoteMembers;
+        this.permissionsDirty = false;
+        this.permissionsVersion = 0L;
     }
 
     private void setDefaultEditingPermissions() {
@@ -87,8 +93,12 @@ public class TeamPlayer {
     }
 
     public void setRole(TeamRole role) {
-        this.role = role;
-        this.setDefaultEditingPermissions();
+        if (this.role != role) {
+            this.role = role;
+            this.setDefaultEditingPermissions();
+            this.permissionsDirty = true;
+            this.permissionsVersion++;
+        }
     }
 
     public boolean canWithdraw() {
@@ -96,7 +106,11 @@ public class TeamPlayer {
     }
 
     public void setCanWithdraw(boolean canWithdraw) {
-        this.canWithdraw = canWithdraw;
+        if (this.canWithdraw != canWithdraw) {
+            this.canWithdraw = canWithdraw;
+            this.permissionsDirty = true;
+            this.permissionsVersion++;
+        }
     }
 
     public boolean canUseEnderChest() {
@@ -104,7 +118,11 @@ public class TeamPlayer {
     }
 
     public void setCanUseEnderChest(boolean canUseEnderChest) {
-        this.canUseEnderChest = canUseEnderChest;
+        if (this.canUseEnderChest != canUseEnderChest) {
+            this.canUseEnderChest = canUseEnderChest;
+            this.permissionsDirty = true;
+            this.permissionsVersion++;
+        }
     }
 
     public boolean canSetHome() {
@@ -112,7 +130,11 @@ public class TeamPlayer {
     }
 
     public void setCanSetHome(boolean canSetHome) {
-        this.canSetHome = canSetHome;
+        if (this.canSetHome != canSetHome) {
+            this.canSetHome = canSetHome;
+            this.permissionsDirty = true;
+            this.permissionsVersion++;
+        }
     }
 
     public boolean canUseHome() {
@@ -120,7 +142,11 @@ public class TeamPlayer {
     }
 
     public void setCanUseHome(boolean canUseHome) {
-        this.canUseHome = canUseHome;
+        if (this.canUseHome != canUseHome) {
+            this.canUseHome = canUseHome;
+            this.permissionsDirty = true;
+            this.permissionsVersion++;
+        }
     }
 
     public boolean canEditMembers() {
@@ -128,7 +154,11 @@ public class TeamPlayer {
     }
 
     public void setCanEditMembers(boolean canEditMembers) {
-        this.canEditMembers = canEditMembers;
+        if (this.canEditMembers != canEditMembers) {
+            this.canEditMembers = canEditMembers;
+            this.permissionsDirty = true;
+            this.permissionsVersion++;
+        }
     }
 
     public boolean canEditCoOwners() {
@@ -136,7 +166,11 @@ public class TeamPlayer {
     }
 
     public void setCanEditCoOwners(boolean canEditCoOwners) {
-        this.canEditCoOwners = canEditCoOwners;
+        if (this.canEditCoOwners != canEditCoOwners) {
+            this.canEditCoOwners = canEditCoOwners;
+            this.permissionsDirty = true;
+            this.permissionsVersion++;
+        }
     }
 
     public boolean canKickMembers() {
@@ -144,7 +178,11 @@ public class TeamPlayer {
     }
 
     public void setCanKickMembers(boolean canKickMembers) {
-        this.canKickMembers = canKickMembers;
+        if (this.canKickMembers != canKickMembers) {
+            this.canKickMembers = canKickMembers;
+            this.permissionsDirty = true;
+            this.permissionsVersion++;
+        }
     }
 
     public boolean canPromoteMembers() {
@@ -152,7 +190,11 @@ public class TeamPlayer {
     }
 
     public void setCanPromoteMembers(boolean canPromoteMembers) {
-        this.canPromoteMembers = canPromoteMembers;
+        if (this.canPromoteMembers != canPromoteMembers) {
+            this.canPromoteMembers = canPromoteMembers;
+            this.permissionsDirty = true;
+            this.permissionsVersion++;
+        }
     }
 
     public boolean canDemoteMembers() {
@@ -160,7 +202,11 @@ public class TeamPlayer {
     }
 
     public void setCanDemoteMembers(boolean canDemoteMembers) {
-        this.canDemoteMembers = canDemoteMembers;
+        if (this.canDemoteMembers != canDemoteMembers) {
+            this.canDemoteMembers = canDemoteMembers;
+            this.permissionsDirty = true;
+            this.permissionsVersion++;
+        }
     }
 
     public boolean canEditPlayer(TeamPlayer target) {
@@ -233,6 +279,18 @@ public class TeamPlayer {
     public boolean isOnline() {
         Player player = this.getBukkitPlayer();
         return player != null && player.isOnline();
+    }
+
+    public boolean isPermissionsDirty() {
+        return this.permissionsDirty;
+    }
+
+    public long getPermissionsVersion() {
+        return this.permissionsVersion;
+    }
+
+    public void clearPermissionsDirty() {
+        this.permissionsDirty = false;
     }
 }
 

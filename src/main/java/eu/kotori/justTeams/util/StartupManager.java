@@ -82,13 +82,17 @@ public class StartupManager {
     public void schedulePeriodicPermissionSaves() {
         this.plugin.getLogger().info("Scheduling periodic permission saves...");
         this.plugin.getTaskRunner().runTimer(() -> {
+            long start = System.currentTimeMillis();
             try {
                 if (this.plugin.getConfigManager().isDebugEnabled()) {
-                    this.plugin.getDebugLogger().log("Performing periodic permission save...");
+                    this.plugin.getDebugLogger().log("Performing periodic permission save (async, dirty members only)...");
                 }
+
                 this.plugin.getTeamManager().forceSaveAllTeamData();
+
                 if (this.plugin.getConfigManager().isDebugEnabled()) {
-                    this.plugin.getDebugLogger().log("Periodic permission save completed successfully");
+                    long duration = System.currentTimeMillis() - start;
+                    this.plugin.getDebugLogger().log("Periodic permission save task dispatched in " + duration + "ms");
                 }
             } catch (Exception e) {
                 this.plugin.getLogger().severe("Periodic permission save failed: " + e.getMessage());

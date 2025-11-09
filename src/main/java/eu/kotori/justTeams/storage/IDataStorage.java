@@ -187,6 +187,98 @@ public interface IDataStorage {
 
     public void setTeamName(int var1, String var2);
 
+    public void batchUpdateMemberPermissions(List<MemberPermissionUpdate> updates);
+
+    public static final class MemberPermissionUpdate {
+        private final int teamId;
+        private final UUID memberUuid;
+        private final boolean canWithdraw;
+        private final boolean canUseEnderChest;
+        private final boolean canSetHome;
+        private final boolean canUseHome;
+        private final boolean canEditMembers;
+        private final boolean canEditCoOwners;
+        private final boolean canKickMembers;
+        private final boolean canPromoteMembers;
+        private final boolean canDemoteMembers;
+
+        private final long version;
+
+        public MemberPermissionUpdate(int teamId,
+                                      UUID memberUuid,
+                                      boolean canWithdraw,
+                                      boolean canUseEnderChest,
+                                      boolean canSetHome,
+                                      boolean canUseHome,
+                                      boolean canEditMembers,
+                                      boolean canEditCoOwners,
+                                      boolean canKickMembers,
+                                      boolean canPromoteMembers,
+                                      boolean canDemoteMembers,
+                                      long version) {
+            this.teamId = teamId;
+            this.memberUuid = memberUuid;
+            this.canWithdraw = canWithdraw;
+            this.canUseEnderChest = canUseEnderChest;
+            this.canSetHome = canSetHome;
+            this.canUseHome = canUseHome;
+            this.canEditMembers = canEditMembers;
+            this.canEditCoOwners = canEditCoOwners;
+            this.canKickMembers = canKickMembers;
+            this.canPromoteMembers = canPromoteMembers;
+            this.canDemoteMembers = canDemoteMembers;
+            this.version = version;
+        }
+
+        public int getTeamId() {
+            return teamId;
+        }
+
+        public UUID getMemberUuid() {
+            return memberUuid;
+        }
+
+        public boolean isCanWithdraw() {
+            return canWithdraw;
+        }
+
+        public boolean isCanUseEnderChest() {
+            return canUseEnderChest;
+        }
+
+        public boolean isCanSetHome() {
+            return canSetHome;
+        }
+
+        public boolean isCanUseHome() {
+            return canUseHome;
+        }
+
+        public boolean isCanEditMembers() {
+            return canEditMembers;
+        }
+
+        public boolean isCanEditCoOwners() {
+            return canEditCoOwners;
+        }
+
+        public boolean isCanKickMembers() {
+            return canKickMembers;
+        }
+
+        public boolean isCanPromoteMembers() {
+            return canPromoteMembers;
+        }
+
+        public boolean isCanDemoteMembers() {
+            return canDemoteMembers;
+        }
+
+        public long getVersion() {
+            return version;
+        }
+    }
+
     public record PlayerSession(UUID playerUuid, String serverName, Timestamp lastSeen) {
     }
 

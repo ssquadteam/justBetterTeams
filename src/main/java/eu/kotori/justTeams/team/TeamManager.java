@@ -3169,49 +3169,134 @@ public class TeamManager {
             this.plugin.getLogger().warning("Could not force save team data for team ID " + teamId + " - team not found in cache");
             return;
         }
-        try {
-            for (TeamPlayer member : team.getMembers()) {
-                this.plugin.getLogger().info("Force saving permissions for member " + String.valueOf(member.getPlayerUuid()) + " in team " + team.getName() + " - canUseEnderChest: " + member.canUseEnderChest() + ", canEditMembers: " + member.canEditMembers());
-                this.storage.updateMemberPermissions(team.getId(), member.getPlayerUuid(), member.canWithdraw(), member.canUseEnderChest(), member.canSetHome(), member.canUseHome());
-                this.storage.updateMemberEditingPermissions(team.getId(), member.getPlayerUuid(), member.canEditMembers(), member.canEditCoOwners(), member.canKickMembers(), member.canPromoteMembers(), member.canDemoteMembers());
+
+        this.plugin.getTaskRunner().runAsync(() -> {
+            int dirtyCount = 0;
+            try {
+                List<IDataStorage.MemberPermissionUpdate> updates = new java.util.ArrayList<>();
+                Map<UUID, Long> versionSnapshot = new java.util.HashMap<>();
+                for (TeamPlayer member : team.getMembers()) {
+                    if (!member.isPermissionsDirty()) {
+                        continue;
+                    }
+                    long version = member.getPermissionsVersion();
+                    versionSnapshot.put(member.getPlayerUuid(), version);
+                    updates.add(new IDataStorage.MemberPermissionUpdate(
+                            team.getId(),
+                            member.getPlayerUuid(),
+                            member.canWithdraw(),
+                            member.canUseEnderChest(),
+                            member.canSetHome(),
+                            member.canUseHome(),
+                            member.canEditMembers(),
+                            member.canEditCoOwners(),
+                            member.canKickMembers(),
+                            member.canPromoteMembers(),
+                            member.canDemoteMembers(),
+                            version
+                    ));
+                    dirtyCount++;
+                }
+
+                if (!updates.isEmpty()) {
+                    this.storage.batchUpdateMemberPermissions(updates);
+                    for (TeamPlayer member : team.getMembers()) {
+                        Long snap = versionSnapshot.get(member.getPlayerUuid());
+                        if (snap != null && member.getPermissionsVersion() == snap && member.isPermissionsDirty()) {
+                            member.clearPermissionsDirty();
+                        }
+                    }
+                    this.plugin.getLogger().fine("Force saved permissions for " + dirtyCount + " members in team " + team.getName());
+                } else if (this.plugin.getConfigManager().isDebugEnabled()) {
+                    this.plugin.getLogger().fine("No permission changes to force save for team " + team.getName());
+                }
+            } catch (Exception e) {
+                this.plugin.getLogger().severe("Failed to force save team " + team.getName() + ": " + e.getMessage());
             }
-            this.plugin.getLogger().info("Successfully force saved team: " + team.getName());
-        } catch (Exception e) {
-            this.plugin.getLogger().severe("Failed to force save team " + team.getName() + ": " + e.getMessage());
-        }
+        });
     }
 
     /*
      * WARNING - Removed try catching itself - possible behaviour change.
      */
     public void forceSaveAllTeamData() {
-        if (this.plugin.getConfigManager().isDebugEnabled()) {
-            this.plugin.getDebugLogger().log("Force saving all team data to database...");
-        }
-        int savedCount = 0;
-        int errorCount = 0;
-        Object object = this.cacheLock;
-        synchronized (object) {
-            for (Team team : this.teamNameCache.values()) {
-                try {
+        this.plugin.getTaskRunner().runAsync(() -> {
+            long start = System.currentTimeMillis();
+            if (this.plugin.getConfigManager().isDebugEnabled()) {
+                this.plugin.getDebugLogger().log("Force saving all team data to database (dirty members only)...");
+            }
+
+            java.util.List<IDataStorage.MemberPermissionUpdate> updates = new java.util.ArrayList<>();
+            Map<Integer, Map<UUID, Long>> versionSnapshots = new java.util.HashMap<>();
+            int teamsWithDirtyMembers = 0;
+
+            synchronized (this.cacheLock) {
+                for (Team team : this.teamNameCache.values()) {
+                    int teamDirty = 0;
+                    Map<UUID, Long> teamSnapshot = null;
                     for (TeamPlayer member : team.getMembers()) {
-                        this.plugin.getLogger().info("Saving permissions for member " + String.valueOf(member.getPlayerUuid()) + " in team " + team.getName() + " - canUseEnderChest: " + member.canUseEnderChest() + ", canEditMembers: " + member.canEditMembers());
-                        this.storage.updateMemberPermissions(team.getId(), member.getPlayerUuid(), member.canWithdraw(), member.canUseEnderChest(), member.canSetHome(), member.canUseHome());
-                        this.storage.updateMemberEditingPermissions(team.getId(), member.getPlayerUuid(), member.canEditMembers(), member.canEditCoOwners(), member.canKickMembers(), member.canPromoteMembers(), member.canDemoteMembers());
+                        if (!member.isPermissionsDirty()) {
+                            continue;
+                        }
+                        if (teamSnapshot == null) {
+                            teamSnapshot = new java.util.HashMap<>();
+                            versionSnapshots.put(team.getId(), teamSnapshot);
+                        }
+                        long version = member.getPermissionsVersion();
+                        teamSnapshot.put(member.getPlayerUuid(), version);
+                        updates.add(new IDataStorage.MemberPermissionUpdate(
+                                team.getId(),
+                                member.getPlayerUuid(),
+                                member.canWithdraw(),
+                                member.canUseEnderChest(),
+                                member.canSetHome(),
+                                member.canUseHome(),
+                                member.canEditMembers(),
+                                member.canEditCoOwners(),
+                                member.canKickMembers(),
+                                member.canPromoteMembers(),
+                                member.canDemoteMembers(),
+                                version
+                        ));
+                        teamDirty++;
                     }
-                    ++savedCount;
-                    this.plugin.getLogger().fine("Force saved team: " + team.getName());
-                } catch (Exception e) {
-                    ++errorCount;
-                    this.plugin.getLogger().warning("Failed to force save team " + team.getName() + ": " + e.getMessage());
+                    if (teamDirty > 0) {
+                        teamsWithDirtyMembers++;
+                    }
                 }
             }
-        }
-        if (errorCount > 0) {
-            this.plugin.getLogger().warning("Force save completed with " + errorCount + " errors out of " + (savedCount + errorCount) + " teams");
-        } else if (this.plugin.getConfigManager().isDebugEnabled()) {
-            this.plugin.getDebugLogger().log("Successfully force saved all " + savedCount + " teams");
-        }
+
+            if (updates.isEmpty()) {
+                if (this.plugin.getConfigManager().isDebugEnabled()) {
+                    this.plugin.getDebugLogger().log("No permission changes detected. Skipping forceSaveAllTeamData database write.");
+                }
+                return;
+            }
+
+            try {
+                this.storage.batchUpdateMemberPermissions(updates);
+                // On success, clear dirty flags only for members that were in the snapshot AND whose version is unchanged.
+                synchronized (this.cacheLock) {
+                    for (Team team : this.teamNameCache.values()) {
+                        Map<UUID, Long> teamSnapshot = versionSnapshots.get(team.getId());
+                        if (teamSnapshot == null) {
+                            continue;
+                        }
+                        for (TeamPlayer member : team.getMembers()) {
+                            Long snap = teamSnapshot.get(member.getPlayerUuid());
+                            if (snap != null && member.getPermissionsVersion() == snap && member.isPermissionsDirty()) {
+                                member.clearPermissionsDirty();
+                            }
+                        }
+                    }
+                }
+                long duration = System.currentTimeMillis() - start;
+                int memberCount = updates.size();
+                this.plugin.getLogger().info("Saved permissions for " + memberCount + " members across " + teamsWithDirtyMembers + " teams in " + duration + "ms");
+            } catch (Exception e) {
+                this.plugin.getLogger().warning("Failed to batch save team member permissions: " + e.getMessage());
+            }
+        });
     }
 
     public Map<String, Team> getTeamNameCache() {

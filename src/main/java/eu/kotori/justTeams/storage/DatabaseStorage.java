@@ -921,19 +921,44 @@ implements IDataStorage {
 
     @Override
     public void updateMemberPermissions(int teamId, UUID memberUuid, boolean canWithdraw, boolean canUseEnderChest, boolean canSetHome, boolean canUseHome) {
-        String sql = "UPDATE donut_team_members SET can_withdraw = ?, can_use_enderchest = ?, can_set_home = ?, can_use_home = ? WHERE player_uuid = ? AND team_id = ?";
+        String sql = "SELECT can_edit_members, can_edit_co_owners, can_kick_members, can_promote_members, can_demote_members " +
+                     "FROM donut_team_members WHERE team_id = ? AND player_uuid = ?";
+        boolean canEditMembers = false;
+        boolean canEditCoOwners = false;
+        boolean canKickMembers = false;
+        boolean canPromoteMembers = false;
+        boolean canDemoteMembers = false;
+
         try (Connection conn = this.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql);){
-            stmt.setBoolean(1, canWithdraw);
-            stmt.setBoolean(2, canUseEnderChest);
-            stmt.setBoolean(3, canSetHome);
-            stmt.setBoolean(4, canUseHome);
-            stmt.setString(5, memberUuid.toString());
-            stmt.setInt(6, teamId);
-            stmt.executeUpdate();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, teamId);
+            stmt.setString(2, memberUuid.toString());
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    canEditMembers = rs.getBoolean("can_edit_members");
+                    canEditCoOwners = rs.getBoolean("can_edit_co_owners");
+                    canKickMembers = rs.getBoolean("can_kick_members");
+                    canPromoteMembers = rs.getBoolean("can_promote_members");
+                    canDemoteMembers = rs.getBoolean("can_demote_members");
+                }
+            }
         } catch (SQLException e) {
-            this.plugin.getLogger().severe("Could not update permissions for member " + String.valueOf(memberUuid) + ": " + e.getMessage());
+            this.plugin.getLogger().warning("Failed to load existing editing permissions for member " + memberUuid + " in team " + teamId + ": " + e.getMessage());
         }
+
+        this.updateAllMemberPermissions(
+                teamId,
+                memberUuid,
+                canWithdraw,
+                canUseEnderChest,
+                canSetHome,
+                canUseHome,
+                canEditMembers,
+                canEditCoOwners,
+                canKickMembers,
+                canPromoteMembers,
+                canDemoteMembers
+        );
     }
 
     @Override
@@ -1198,7 +1223,25 @@ implements IDataStorage {
         boolean canUseEnderChest = rs.getBoolean("can_use_enderchest");
         boolean canSetHome = rs.getBoolean("can_set_home");
         boolean canUseHome = rs.getBoolean("can_use_home");
-        return new TeamPlayer(playerUuid, role, joinDate, canWithdraw, canUseEnderChest, canSetHome, canUseHome);
+        boolean canEditMembers = rs.getBoolean("can_edit_members");
+        boolean canEditCoOwners = rs.getBoolean("can_edit_co_owners");
+        boolean canKickMembers = rs.getBoolean("can_kick_members");
+        boolean canPromoteMembers = rs.getBoolean("can_promote_members");
+        boolean canDemoteMembers = rs.getBoolean("can_demote_members");
+        return new TeamPlayer(
+                playerUuid,
+                role,
+                joinDate,
+                canWithdraw,
+                canUseEnderChest,
+                canSetHome,
+                canUseHome,
+                canEditMembers,
+                canEditCoOwners,
+                canKickMembers,
+                canPromoteMembers,
+                canDemoteMembers
+        );
     }
 
     /*
@@ -1943,23 +1986,43 @@ implements IDataStorage {
 
     @Override
     public void updateMemberEditingPermissions(int teamId, UUID memberUuid, boolean canEditMembers, boolean canEditCoOwners, boolean canKickMembers, boolean canPromoteMembers, boolean canDemoteMembers) {
-        if (this.isConnected()) {
-            try (Connection conn = this.getConnection();){
-                String sql = "UPDATE donut_team_members SET can_edit_members = ?, can_edit_co_owners = ?, can_kick_members = ?, can_promote_members = ?, can_demote_members = ? WHERE team_id = ? AND player_uuid = ?";
-                try (PreparedStatement stmt = conn.prepareStatement(sql);){
-                    stmt.setBoolean(1, canEditMembers);
-                    stmt.setBoolean(2, canEditCoOwners);
-                    stmt.setBoolean(3, canKickMembers);
-                    stmt.setBoolean(4, canPromoteMembers);
-                    stmt.setBoolean(5, canDemoteMembers);
-                    stmt.setInt(6, teamId);
-                    stmt.setString(7, memberUuid.toString());
-                    stmt.executeUpdate();
+        // Fetch all basic permission flags in a single query to avoid multiple round trips.
+        String sql = "SELECT can_withdraw, can_use_enderchest, can_set_home, can_use_home " +
+                     "FROM donut_team_members WHERE team_id = ? AND player_uuid = ?";
+        boolean canWithdraw = false;
+        boolean canUseEnderChest = false;
+        boolean canSetHome = false;
+        boolean canUseHome = false;
+
+        try (Connection conn = this.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, teamId);
+            stmt.setString(2, memberUuid.toString());
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    canWithdraw = rs.getBoolean("can_withdraw");
+                    canUseEnderChest = rs.getBoolean("can_use_enderchest");
+                    canSetHome = rs.getBoolean("can_set_home");
+                    canUseHome = rs.getBoolean("can_use_home");
                 }
-            } catch (SQLException e) {
-                this.plugin.getLogger().warning("Failed to update member editing permissions: " + e.getMessage());
             }
+        } catch (SQLException e) {
+            this.plugin.getLogger().warning("Failed to load existing basic permissions for member " + memberUuid + " in team " + teamId + ": " + e.getMessage());
         }
+
+        this.updateAllMemberPermissions(
+                teamId,
+                memberUuid,
+                canWithdraw,
+                canUseEnderChest,
+                canSetHome,
+                canUseHome,
+                canEditMembers,
+                canEditCoOwners,
+                canKickMembers,
+                canPromoteMembers,
+                canDemoteMembers
+        );
     }
 
     @Override
@@ -2474,6 +2537,159 @@ implements IDataStorage {
         } catch (SQLException e) {
             this.plugin.getLogger().warning("Failed to set team name: " + e.getMessage());
         }
+    }
+
+    /**
+     * Unified low-level helper to update all 9 permission columns in a single statement.
+     */
+    private void updateAllMemberPermissions(int teamId,
+                                            UUID memberUuid,
+                                            boolean canWithdraw,
+                                            boolean canUseEnderChest,
+                                            boolean canSetHome,
+                                            boolean canUseHome,
+                                            boolean canEditMembers,
+                                            boolean canEditCoOwners,
+                                            boolean canKickMembers,
+                                            boolean canPromoteMembers,
+                                            boolean canDemoteMembers) {
+        if (!this.isConnected()) {
+            return;
+        }
+        String sql = "UPDATE donut_team_members " +
+                     "SET can_withdraw = ?, " +
+                     "    can_use_enderchest = ?, " +
+                     "    can_set_home = ?, " +
+                     "    can_use_home = ?, " +
+                     "    can_edit_members = ?, " +
+                     "    can_edit_co_owners = ?, " +
+                     "    can_kick_members = ?, " +
+                     "    can_promote_members = ?, " +
+                     "    can_demote_members = ? " +
+                     "WHERE team_id = ? AND player_uuid = ?";
+        try (Connection conn = this.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setBoolean(1, canWithdraw);
+            stmt.setBoolean(2, canUseEnderChest);
+            stmt.setBoolean(3, canSetHome);
+            stmt.setBoolean(4, canUseHome);
+            stmt.setBoolean(5, canEditMembers);
+            stmt.setBoolean(6, canEditCoOwners);
+            stmt.setBoolean(7, canKickMembers);
+            stmt.setBoolean(8, canPromoteMembers);
+            stmt.setBoolean(9, canDemoteMembers);
+            stmt.setInt(10, teamId);
+            stmt.setString(11, memberUuid.toString());
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            this.plugin.getLogger().warning("Failed to update all permissions for member " + memberUuid + " in team " + teamId + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Batch implementation for updating member permissions using a single connection
+     * and batched PreparedStatement to minimize round-trips.
+     */
+    @Override
+    public void batchUpdateMemberPermissions(List<IDataStorage.MemberPermissionUpdate> updates) {
+        if (!this.isConnected() || updates == null || updates.isEmpty()) {
+            return;
+        }
+        long start = System.currentTimeMillis();
+        String sql = "UPDATE donut_team_members " +
+                     "SET can_withdraw = ?, " +
+                     "    can_use_enderchest = ?, " +
+                     "    can_set_home = ?, " +
+                     "    can_use_home = ?, " +
+                     "    can_edit_members = ?, " +
+                     "    can_edit_co_owners = ?, " +
+                     "    can_kick_members = ?, " +
+                     "    can_promote_members = ?, " +
+                     "    can_demote_members = ? " +
+                     "WHERE team_id = ? AND player_uuid = ?";
+        try (Connection conn = this.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            boolean originalAutoCommit = conn.getAutoCommit();
+            try {
+                conn.setAutoCommit(false);
+
+                int batchSize = 0;
+                final int FLUSH_THRESHOLD = 100;
+
+                for (IDataStorage.MemberPermissionUpdate update : updates) {
+                    stmt.setBoolean(1, update.isCanWithdraw());
+                    stmt.setBoolean(2, update.isCanUseEnderChest());
+                    stmt.setBoolean(3, update.isCanSetHome());
+                    stmt.setBoolean(4, update.isCanUseHome());
+                    stmt.setBoolean(5, update.isCanEditMembers());
+                    stmt.setBoolean(6, update.isCanEditCoOwners());
+                    stmt.setBoolean(7, update.isCanKickMembers());
+                    stmt.setBoolean(8, update.isCanPromoteMembers());
+                    stmt.setBoolean(9, update.isCanDemoteMembers());
+                    stmt.setInt(10, update.getTeamId());
+                    stmt.setString(11, update.getMemberUuid().toString());
+                    stmt.addBatch();
+                    batchSize++;
+                    if (batchSize >= FLUSH_THRESHOLD) {
+                        stmt.executeBatch();
+                        batchSize = 0;
+                    }
+                }
+
+                if (batchSize > 0) {
+                    stmt.executeBatch();
+                }
+
+                conn.commit();
+            } catch (SQLException e) {
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackEx) {
+                    this.plugin.getLogger().warning("Failed to rollback batchUpdateMemberPermissions: " + rollbackEx.getMessage());
+                }
+                throw new RuntimeException("Batch update of member permissions failed", e);
+            } finally {
+                try {
+                    conn.setAutoCommit(originalAutoCommit);
+                } catch (SQLException resetEx) {
+                    this.plugin.getLogger().warning("Failed to restore auto-commit after batchUpdateMemberPermissions: " + resetEx.getMessage());
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Batch update of member permissions failed (connection-level)", e);
+        }
+
+        long duration = System.currentTimeMillis() - start;
+        if (this.plugin.getConfigManager().isDebugEnabled()) {
+            this.plugin.getLogger().fine("Batch updated permissions for " + updates.size() + " members in " + duration + "ms");
+        }
+    }
+
+    /**
+     * Helper to fetch a boolean permission column for a specific member.
+     * Used to preserve existing values when only a subset of flags are updated.
+     */
+    private boolean getBooleanColumn(int teamId, UUID memberUuid, String columnName) {
+        if (!this.isConnected()) {
+            return false;
+        }
+        String sql = "SELECT " + columnName + " FROM donut_team_members WHERE team_id = ? AND player_uuid = ?";
+        try (Connection conn = this.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, teamId);
+            stmt.setString(2, memberUuid.toString());
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getBoolean(1);
+                }
+            }
+        } catch (SQLException e) {
+            if (this.plugin.getConfigManager().isDebugEnabled()) {
+                this.plugin.getLogger().fine("Failed to read column " + columnName + " for member " + memberUuid + " in team " + teamId + ": " + e.getMessage());
+            }
+        }
+        return false;
     }
 }
 
